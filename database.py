@@ -7,6 +7,10 @@ from datetime import datetime
 
 
 def get_engine():
+    global engine
+    if engine is not None:
+        return engine
+
     url = os.environ.get("DATABASE_URL")
     if url:
         if url.startswith("postgres://"):
@@ -20,12 +24,13 @@ def get_engine():
                     url = urlunparse(parsed._replace(netloc=netloc))
             except Exception:
                 pass
-        return create_engine(url, pool_pre_ping=True, poolclass=NullPool)
-    db_path = "/tmp/horariolivre.db"
-    return create_engine(f"sqlite:///{db_path}")
+        engine = create_engine(url, pool_pre_ping=True, poolclass=NullPool)
+    else:
+        engine = create_engine("sqlite:////tmp/horariolivre.db")
+    return engine
 
 
-engine = get_engine()
+engine = None
 
 
 class Base(DeclarativeBase):
@@ -117,13 +122,13 @@ def slugify(name: str) -> str:
 
 
 def init_db():
-    Base.metadata.create_all(engine)
+    Base.metadata.create_all(get_engine())
 
 
 def create_workspace(name: str, password: str | None = None):
     base_slug = slugify(name)
     slug = base_slug
-    with Session(engine) as sess:
+    with Session(get_engine()) as sess:
         counter = 1
         while sess.query(Workspace).filter_by(slug=slug).first():
             slug = f"{base_slug}-{counter}"
@@ -137,12 +142,12 @@ def create_workspace(name: str, password: str | None = None):
 
 
 def get_workspace(slug: str):
-    with Session(engine) as sess:
+    with Session(get_engine()) as sess:
         return sess.query(Workspace).filter_by(slug=slug).first()
 
 
 def get_members(workspace_id: int):
-    with Session(engine) as sess:
+    with Session(get_engine()) as sess:
         return list(
             sess.query(Member).filter_by(workspace_id=workspace_id).all()
         )
@@ -151,7 +156,7 @@ def get_members(workspace_id: int):
 def add_member(
     workspace_id: int, name: str, course: str, busy: list, force: bool = False
 ):
-    with Session(engine) as sess:
+    with Session(get_engine()) as sess:
         existing = (
             sess.query(Member)
             .filter_by(workspace_id=workspace_id, name=name)
@@ -184,7 +189,7 @@ def add_member(
 
 
 def remove_member(member_id: int):
-    with Session(engine) as sess:
+    with Session(get_engine()) as sess:
         m = sess.query(Member).filter_by(id=member_id).first()
         if m:
             sess.delete(m)
