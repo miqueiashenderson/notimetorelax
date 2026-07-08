@@ -1,4 +1,5 @@
-import json, os, re, hashlib, secrets, unicodedata
+import json, os, re, hashlib, secrets, unicodedata, socket
+from urllib.parse import urlparse, urlunparse
 from sqlalchemy import create_engine
 from sqlalchemy.pool import NullPool
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, Session
@@ -10,9 +11,18 @@ def get_engine():
     if url:
         if url.startswith("postgres://"):
             url = url.replace("postgres://", "postgresql://", 1)
-        return create_engine(url, pool_pre_ping=True, poolclass=NullPool, echo=False)
+        parsed = urlparse(url)
+        if parsed.hostname and 'supabase' in parsed.hostname:
+            try:
+                ipv4 = socket.gethostbyname(parsed.hostname)
+                if ipv4 != parsed.hostname:
+                    netloc = parsed.netloc.replace(parsed.hostname, ipv4)
+                    url = urlunparse(parsed._replace(netloc=netloc))
+            except Exception:
+                pass
+        return create_engine(url, pool_pre_ping=True, poolclass=NullPool)
     db_path = "/tmp/horariolivre.db"
-    return create_engine(f"sqlite:///{db_path}", echo=False)
+    return create_engine(f"sqlite:///{db_path}")
 
 
 engine = get_engine()

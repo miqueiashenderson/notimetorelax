@@ -1,7 +1,8 @@
 import re, unicodedata
+from io import BytesIO
 from pypdf import PdfReader
 
-DIAS = ["Seg", "Ter", "Qua", "Qui", "Sex"]
+DIAS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"]
 SLOTS = [
     "07:00-08:00", "08:00-09:00", "09:00-10:00", "10:10-11:10", "11:10-12:10",
     "13:00-14:00", "14:00-15:00", "15:00-16:00", "16:10-17:10", "17:10-18:10",
@@ -11,16 +12,23 @@ SLOTS = [
 
 def extrair_texto(path: str) -> str:
     try:
-        reader = PdfReader(path)
-        return "\n".join(pag.extract_text() or "" for pag in reader.pages)
+        with open(path, "rb") as f:
+            reader = PdfReader(f)
+            return "\n".join(
+                pag.extract_text(extraction_mode="layout") or ""
+                for pag in reader.pages
+            )
     except Exception:
         return ""
 
 
 def extrair_de_pdf_bytes(content: bytes):
     try:
-        reader = PdfReader(content)
-        texto = "\n".join(pag.extract_text() or "" for pag in reader.pages)
+        reader = PdfReader(BytesIO(content))
+        texto = "\n".join(
+            pag.extract_text(extraction_mode="layout") or ""
+            for pag in reader.pages
+        )
         if not texto.strip():
             return None
         return extrair_completo(texto)
@@ -32,11 +40,11 @@ def extrair_dados_aluno(texto: str):
     nome = curso = ""
     for linha in texto.split('\n'):
         if not nome:
-            m = re.search(r'(?:Discente|Nome):\s*(.+)', linha)
+            m = re.search(r'(?:Discente|N\s*o\s*m\s*e)\s*:\s*(.+)', linha)
             if m:
                 nome = m.group(1).strip()
         if not curso:
-            m = re.search(r'Curso:\s*(.+)', linha)
+            m = re.search(r'C\s*u\s*r\s*s\s*o\s*:\s*(.+)', linha)
             if m:
                 curso = m.group(1).strip()
     return nome, curso
