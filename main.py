@@ -15,10 +15,7 @@ _db_ready = False
 def _ensure_db():
     global _db_ready
     if not _db_ready:
-        try:
-            init_db()
-        except Exception:
-            pass
+        init_db()
         _db_ready = True
 
 
@@ -53,7 +50,13 @@ app = FastAPI(title="NoTimeToRelax")
 @app.middleware("http")
 async def ensure_db(request: Request, call_next):
     _ensure_db()
-    return await call_next(request)
+    try:
+        return await call_next(request)
+    except Exception as e:
+        return JSONResponse(
+            {"erro": f"Erro interno: {type(e).__name__}: {e}"},
+            status_code=500,
+        )
 
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
