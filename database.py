@@ -3,13 +3,17 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, Session
 from datetime import datetime
 
-DB_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.path.join(DB_DIR, "data", "horariolivre.db")
-
 
 def get_engine():
-    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
-    return create_engine(f"sqlite:///{DB_PATH}", echo=False)
+    url = os.environ.get("DATABASE_URL")
+    if url:
+        if url.startswith("postgres://"):
+            url = url.replace("postgres://", "postgresql://", 1)
+        return create_engine(url, echo=False)
+    db_dir = os.path.dirname(os.path.abspath(__file__))
+    db_path = os.path.join(db_dir, "data", "horariolivre.db")
+    os.makedirs(os.path.dirname(db_path), exist_ok=True)
+    return create_engine(f"sqlite:///{db_path}", echo=False)
 
 
 engine = get_engine()

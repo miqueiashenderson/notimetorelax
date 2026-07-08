@@ -2,5 +2,17 @@ services:
   - type: web
     name: notimetorelax
     runtime: python
-    buildCommand: pip install -r requirements.txt
+    buildCommand: |
+      apt-get update && apt-get install -y poppler-utils && rm -rf /var/lib/apt/lists/*
+      pip install -r requirements.txt
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: notimetorelax-db
+          property: connectionString
+
+databases:
+  - name: notimetorelax-db
+    databaseName: horariolivre
+    plan: free
