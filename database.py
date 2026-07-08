@@ -1,4 +1,4 @@
-import json, os, re, hashlib, secrets
+import json, os, re, hashlib, secrets, unicodedata
 from sqlalchemy import create_engine
 from sqlalchemy.pool import NullPool
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, Session
@@ -11,9 +11,7 @@ def get_engine():
         if url.startswith("postgres://"):
             url = url.replace("postgres://", "postgresql://", 1)
         return create_engine(url, pool_pre_ping=True, poolclass=NullPool, echo=False)
-    db_dir = os.path.dirname(os.path.abspath(__file__))
-    db_path = os.path.join(db_dir, "data", "horariolivre.db")
-    os.makedirs(os.path.dirname(db_path), exist_ok=True)
+    db_path = "/tmp/horariolivre.db"
     return create_engine(f"sqlite:///{db_path}", echo=False)
 
 
@@ -102,6 +100,7 @@ def check_password(password: str, stored: str) -> bool:
 
 def slugify(name: str) -> str:
     s = name.lower().strip()
+    s = unicodedata.normalize('NFKD', s).encode('ASCII', 'ignore').decode('ASCII')
     s = re.sub(r"[^\w\s-]", "", s)
     s = re.sub(r"[-\s]+", "-", s)
     return s.strip("-")

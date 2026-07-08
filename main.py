@@ -49,8 +49,8 @@ app = FastAPI(title="NoTimeToRelax")
 
 @app.middleware("http")
 async def ensure_db(request: Request, call_next):
-    _ensure_db()
     try:
+        _ensure_db()
         return await call_next(request)
     except Exception as e:
         return JSONResponse(
