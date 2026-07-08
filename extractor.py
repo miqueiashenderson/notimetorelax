@@ -1,4 +1,5 @@
-import re, subprocess, unicodedata
+import re, unicodedata
+import fitz
 
 DIAS = ["Seg", "Ter", "Qua", "Qui", "Sex"]
 SLOTS = [
@@ -10,13 +11,21 @@ SLOTS = [
 
 def extrair_texto(path: str) -> str:
     try:
-        r = subprocess.run(
-            ['pdftotext', '-layout', path, '-'],
-            capture_output=True, text=True, timeout=10
-        )
-        return r.stdout if r.returncode == 0 else ""
+        with fitz.open(path) as doc:
+            return "\n".join(pag.get_text() for pag in doc)
     except Exception:
         return ""
+
+
+def extrair_de_pdf_bytes(content: bytes):
+    try:
+        with fitz.open(stream=content, filetype="pdf") as doc:
+            texto = "\n".join(pag.get_text() for pag in doc)
+        if not texto.strip():
+            return None
+        return extrair_completo(texto)
+    except Exception:
+        return None
 
 
 def extrair_dados_aluno(texto: str):
@@ -46,7 +55,7 @@ def curso_curto(curso: str) -> str:
     return curso[:25]
 
 
-def parse_tabela(texto: str):
+def extrair_horarios(texto: str):
     linhas = texto.split('\n')
 
     inicio = -1
@@ -177,20 +186,14 @@ def parse_tabela(texto: str):
                     resultados.append((dia, time_range, code))
                     break
 
-    vistos = set()
-    unicos = []
-    for r in resultados:
-        if r not in vistos:
-            vistos.add(r)
-            unicos.append(r)
-    return unicos
+    return list(dict.fromkeys(resultados))
+
+
+SLOT_MAP = {s: i for i, s in enumerate(SLOTS)}
 
 
 def slot_index(tr: str) -> int:
-    for i, s in enumerate(SLOTS):
-        if s == tr:
-            return i
-    return -1
+    return SLOT_MAP.get(tr, -1)
 
 
 def title_case(nome: str) -> str:
@@ -211,26 +214,19 @@ def extrair_completo(texto: str):
         return None
     nome = unicodedata.normalize('NFC', nome)
     curso = unicodedata.normalize('NFC', curso)
-    horarios_raw = parse_tabela(texto)
+    horarios_raw = extrair_horarios(texto)
     busy = []
     for dia, hr, _ in horarios_raw:
         di = DIAS.index(dia)
         si = slot_index(hr)
         if si >= 0:
             busy.append([di, si])
-    unique_busy = []
-    seen = set()
-    for item in busy:
-        key = tuple(item)
-        if key not in seen:
-            seen.add(key)
-            unique_busy.append(item)
     return {
         "nome": title_case(nome.lower()),
         "curso": curso_curto(curso) if curso else "",
         "horarios_raw": horarios_raw,
-        "busy": unique_busy,
-        "total": len(unique_busy)
+        "busy": busy,
+        "total": len(busy)
     }
 
 

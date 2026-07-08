@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Acesso — {{ workspace.name }} — NoTimeToRelax</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+  :root{
+    --bg:        #161616;
+    --surface:   #1f1f1f;
+    --surface-2: #262626;
+    --line:      #3a3a3a;
+    --fg:        #f2f4f8;
+    --dim:       #8d8d8d;
+    --cyan:      #3ddbd9;
+    --magenta:   #ee5396;
+    --sans: 'Inter', -apple-system, 'Segoe UI', sans-serif;
+    --mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--fg);
+    font-family:var(--sans);
+    min-height:100vh;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:20px;
+  }
+
+  .card{width:100%;max-width:420px;}
+
+  .panel{
+    background:var(--surface);
+    border:1px solid var(--line);
+    border-radius:10px;
+    padding:24px;
+  }
+
+  h1{
+    font-family:var(--mono);
+    font-size:20px;
+    font-weight:700;
+    margin:0 0 4px;
+  }
+
+  .sub{
+    font-size:13px;
+    color:var(--dim);
+    margin:0 0 20px;
+    line-height:1.5;
+  }
+
+  label{
+    display:block;
+    font-size:12.5px;
+    color:var(--dim);
+    margin-bottom:6px;
+  }
+
+  input[type="password"]{
+    width:100%;
+    padding:10px 12px;
+    border-radius:6px;
+    border:1px solid var(--line);
+    background:var(--surface-2);
+    color:var(--fg);
+    font-size:14px;
+    font-family:var(--sans);
+    outline:none;
+    transition:border-color .15s;
+  }
+  input[type="password"]:focus{border-color:var(--cyan);}
+
+  .btn{
+    display:block;
+    width:100%;
+    margin-top:12px;
+    padding:10px;
+    border-radius:6px;
+    border:1px solid var(--cyan);
+    background:transparent;
+    color:var(--cyan);
+    font-family:var(--mono);
+    font-size:12px;
+    letter-spacing:.05em;
+    cursor:pointer;
+    transition:background .15s, color .15s;
+  }
+  .btn:hover{
+    background:var(--cyan);
+    color:var(--bg);
+  }
+
+  .erro{
+    margin-top:16px;
+    background:var(--surface);
+    border:1px solid #7a2a3c;
+    border-left:3px solid var(--magenta);
+    border-radius:6px;
+    padding:12px 14px;
+    font-size:13px;
+    color:var(--magenta);
+    display:none;
+  }
+
+  footer{
+    text-align:center;
+    margin-top:24px;
+    color:var(--dim);
+    font-size:11px;
+    font-family:var(--mono);
+  }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="panel">
+    <h1>{{ workspace.name }}</h1>
+    <p class="sub">Este workspace é protegido por senha. Digite a senha para acessar.</p>
+    <form id="loginForm">
+      <label for="password">Senha</label>
+      <input type="password" id="password" placeholder="senha do workspace" required autocomplete="off">
+      <button class="btn" type="submit">Acessar workspace</button>
+    </form>
+    <div class="erro" id="erro"></div>
+  </div>
+  <footer>
+    <a href="/" style="color:var(--dim);text-decoration:none;">NoTimeToRelax</a>
+  </footer>
+</div>
+
+<script>
+document.getElementById('loginForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const password = document.getElementById('password').value;
+  const erro = document.getElementById('erro');
+  erro.style.display = 'none';
+  try{
+    const r = await fetch('/api/workspace/{{ workspace.slug }}/auth', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({password})
+    });
+    const data = await r.json();
+    if(data.ok){
+      window.location.href = '/workspace/{{ workspace.slug }}';
+    }else{
+      erro.textContent = data.erro || 'Senha incorreta.';
+      erro.style.display = 'block';
+    }
+  }catch(err){
+    erro.textContent = 'Erro ao conectar. Tente novamente.';
+    erro.style.display = 'block';
+  }
+});
+</script>
+</body>
+</html>

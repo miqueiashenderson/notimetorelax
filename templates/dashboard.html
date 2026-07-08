@@ -295,7 +295,7 @@ const SLOTS = [
   "18:30-19:20","19:20-20:10","20:20-21:10","21:10-22:00"
 ];
 
-let MEMBERS = {{ members_json|safe }};
+let MEMBERS = {{ members|tojson }};
 
 const active = new Set(MEMBERS.map(m=>m.name));
 

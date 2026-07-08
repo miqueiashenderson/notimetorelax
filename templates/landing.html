@@ -147,14 +147,16 @@
   <div class="erro">{{ erro }}</div>
   {% endif %}
 
-  <div class="panel">
-    <h2>Criar workspace</h2>
-    <form id="createForm" onsubmit="return criarWorkspace(event)">
-      <label for="nome">Nome da equipe / projeto</label>
-      <input type="text" id="nome" placeholder="ex: Minha Equipe" required autocomplete="off">
-      <button class="btn" type="submit">Criar workspace</button>
-    </form>
-  </div>
+    <div class="panel">
+      <h2>Criar workspace</h2>
+      <form id="createForm" onsubmit="return criarWorkspace(event)">
+        <label for="nome">Nome da equipe / projeto</label>
+        <input type="text" id="nome" placeholder="ex: Minha Equipe" required autocomplete="off">
+        <label for="createPassword" style="margin-top:12px;">Senha (opcional — workspace ficará protegido)</label>
+        <input type="text" id="createPassword" placeholder="ex: minha-senha" autocomplete="off">
+        <button class="btn" type="submit">Criar workspace</button>
+      </form>
+    </div>
 
   <div class="panel">
     <h2>Acessar workspace existente</h2>
@@ -166,7 +168,7 @@
   </div>
 
   <footer>
-    <a href="https://github.com/anomalyco/opencode" style="color:var(--dim);text-decoration:none;">NoTimeToRelax</a>
+    <a href="/" style="color:var(--dim);text-decoration:none;">NoTimeToRelax</a>
   </footer>
 </div>
 
@@ -175,8 +177,10 @@ async function criarWorkspace(e){
   e.preventDefault();
   const nome = document.getElementById('nome').value.trim();
   if(!nome) return false;
+  const password = document.getElementById('createPassword').value.trim();
   const form = new FormData();
   form.append('name', nome);
+  if(password) form.append('password', password);
   try{
     const r = await fetch('/api/workspace', {method:'POST', body:form});
     const data = await r.json();

@@ -1,5 +1,6 @@
-import json, os, re
+import json, os, re, hashlib, secrets
 from sqlalchemy import create_engine
+from sqlalchemy.pool import NullPool
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, Session
 from datetime import datetime
 
@@ -9,7 +10,7 @@ def get_engine():
     if url:
         if url.startswith("postgres://"):
             url = url.replace("postgres://", "postgresql://", 1)
-        return create_engine(url, echo=False)
+        return create_engine(url, pool_pre_ping=True, poolclass=NullPool, echo=False)
     db_dir = os.path.dirname(os.path.abspath(__file__))
     db_path = os.path.join(db_dir, "data", "horariolivre.db")
     os.makedirs(os.path.dirname(db_path), exist_ok=True)
@@ -29,6 +30,7 @@ class Workspace(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     slug: Mapped[str] = mapped_column(unique=True, nullable=False)
     name: Mapped[str] = mapped_column(nullable=False)
+    password_hash: Mapped[str] = mapped_column(nullable=True)
     created_at: Mapped[str] = mapped_column(
         default=lambda: datetime.utcnow().isoformat()
     )
@@ -38,6 +40,7 @@ class Workspace(Base):
             "id": self.id,
             "slug": self.slug,
             "name": self.name,
+            "has_password": bool(self.password_hash),
             "created_at": self.created_at,
         }
 
@@ -83,6 +86,20 @@ CORES = [
 ]
 
 
+def hash_password(password: str) -> str:
+    salt = secrets.token_hex(16)
+    h = hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), 100_000)
+    return f"{salt}:{h.hex()}"
+
+
+def check_password(password: str, stored: str) -> bool:
+    try:
+        salt, h = stored.split(":", 1)
+        return h == hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), 100_000).hex()
+    except Exception:
+        return False
+
+
 def slugify(name: str) -> str:
     s = name.lower().strip()
     s = re.sub(r"[^\w\s-]", "", s)
@@ -94,7 +111,7 @@ def init_db():
     Base.metadata.create_all(engine)
 
 
-def create_workspace(name: str):
+def create_workspace(name: str, password: str | None = None):
     base_slug = slugify(name)
     slug = base_slug
     with Session(engine) as sess:
@@ -102,7 +119,8 @@ def create_workspace(name: str):
         while sess.query(Workspace).filter_by(slug=slug).first():
             slug = f"{base_slug}-{counter}"
             counter += 1
-        ws = Workspace(slug=slug, name=name)
+        pw_hash = hash_password(password) if password else None
+        ws = Workspace(slug=slug, name=name, password_hash=pw_hash)
         sess.add(ws)
         sess.commit()
         sess.refresh(ws)

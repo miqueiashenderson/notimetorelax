@@ -1,35 +1,54 @@
-import os, json, re
+import os, time, hashlib, hmac, secrets
 from fastapi import FastAPI, Request, UploadFile, File, Form, Query
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
-from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from contextlib import asynccontextmanager
 
-from database import init_db, create_workspace, get_workspace, get_members, add_member, remove_member
-from extractor import extrair_de_pdf
+from database import init_db, create_workspace, get_workspace, get_members, add_member, remove_member, check_password
+from extractor import extrair_de_pdf_bytes
+
+SESSION_TTL = 86400 * 30
+SESSION_SECRET = os.environ.get("SESSION_SECRET") or secrets.token_hex(32)
+
+
+def _make_session_token(slug: str) -> str:
+    payload = f"{slug}:{int(time.time()) + SESSION_TTL}"
+    sig = hmac.new(SESSION_SECRET.encode(), payload.encode(), hashlib.sha256).hexdigest()[:16]
+    return f"{payload}.{sig}"
+
+
+def _check_session(request: Request, slug: str) -> bool:
+    cookie = request.cookies.get(f"ws_{slug}")
+    if not cookie:
+        return False
+    try:
+        payload, sig = cookie.rsplit(".", 1)
+        expected = hmac.new(SESSION_SECRET.encode(), payload.encode(), hashlib.sha256).hexdigest()[:16]
+        if not hmac.compare_digest(sig, expected):
+            return False
+        data_slug, expiry = payload.rsplit(":", 1)
+        return data_slug == slug and time.time() < float(expiry)
+    except Exception:
+        return False
+
+
+def _require_auth(request: Request, ws) -> bool:
+    return not ws.password_hash or _check_session(request, ws.slug)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
-    os.makedirs("uploads", exist_ok=True)
     yield
 
 
 app = FastAPI(title="NoTimeToRelax", lifespan=lifespan)
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-
 templates = Jinja2Templates(directory=os.path.join(BASE_DIR, "templates"))
 
-STATIC_DIR = os.path.join(BASE_DIR, "static")
-os.makedirs(STATIC_DIR, exist_ok=True)
 
-UPLOAD_DIR = os.path.join(BASE_DIR, "uploads")
-os.makedirs(UPLOAD_DIR, exist_ok=True)
-
-
-# ─── Frontend ───────────────────────────────────────────────────────────────
+# ─── Frontend ────────────────────────────────────────────────────────────────
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -44,14 +63,31 @@ async def dashboard(request: Request, slug: str):
         return templates.TemplateResponse(
             "landing.html", {"request": request, "erro": "Workspace não encontrado."}
         )
+    if not _require_auth(request, ws):
+        return RedirectResponse(url=f"/workspace/{slug}/login", status_code=302)
     members = get_members(ws.id)
     return templates.TemplateResponse(
         "dashboard.html",
         {
             "request": request,
             "workspace": ws.to_dict(),
-            "members_json": json.dumps([m.to_dict() for m in members]),
+            "members": [m.to_dict() for m in members],
         },
+    )
+
+
+@app.get("/workspace/{slug}/login", response_class=HTMLResponse)
+async def workspace_login(request: Request, slug: str):
+    ws = get_workspace(slug)
+    if not ws:
+        return templates.TemplateResponse(
+            "landing.html", {"request": request, "erro": "Workspace não encontrado."}
+        )
+    if not ws.password_hash:
+        return RedirectResponse(url=f"/workspace/{slug}", status_code=302)
+    return templates.TemplateResponse(
+        "workspace-login.html",
+        {"request": request, "workspace": ws.to_dict()},
     )
 
 
@@ -62,33 +98,46 @@ async def upload_page(request: Request, slug: str):
         return templates.TemplateResponse(
             "landing.html", {"request": request, "erro": "Workspace não encontrado."}
         )
+    if not _require_auth(request, ws):
+        return RedirectResponse(url=f"/workspace/{slug}/login", status_code=302)
     return templates.TemplateResponse(
         "upload.html", {"request": request, "workspace": ws.to_dict()}
     )
 
 
-# ─── API ────────────────────────────────────────────────────────────────────
+# ─── API ─────────────────────────────────────────────────────────────────────
 
 
 @app.post("/api/workspace")
-async def api_create_workspace(name: str = Form(...)):
+async def api_create_workspace(name: str = Form(...), password: str = Form("")):
     if not name or not name.strip():
         return JSONResponse({"erro": "Nome é obrigatório."}, status_code=400)
-    ws = create_workspace(name.strip())
-    return JSONResponse(ws.to_dict())
+    pw = password.strip() if password else ""
+    ws = create_workspace(name.strip(), pw if pw else None)
+    resp = JSONResponse(ws.to_dict())
+    if pw:
+        token = _make_session_token(ws.slug)
+        resp.set_cookie(
+            key=f"ws_{ws.slug}", value=token,
+            httponly=True, max_age=SESSION_TTL, samesite="lax",
+        )
+    return resp
 
 
 @app.get("/api/workspace/{slug}/members")
-async def api_get_members(slug: str):
+async def api_get_members(request: Request, slug: str):
     ws = get_workspace(slug)
     if not ws:
         return JSONResponse({"erro": "Workspace não encontrado."}, status_code=404)
+    if not _require_auth(request, ws):
+        return JSONResponse({"erro": "Acesso negado."}, status_code=403)
     members = get_members(ws.id)
     return JSONResponse([m.to_dict() for m in members])
 
 
 @app.post("/api/workspace/{slug}/upload")
 async def api_upload(
+    request: Request,
     slug: str,
     file: UploadFile = File(...),
     force: bool = Query(False),
@@ -97,17 +146,18 @@ async def api_upload(
     ws = get_workspace(slug)
     if not ws:
         return JSONResponse({"erro": "Workspace não encontrado."}, status_code=404)
+    if not _require_auth(request, ws):
+        return JSONResponse({"erro": "Acesso negado."}, status_code=403)
 
     if not file.filename or not file.filename.lower().endswith(".pdf"):
         return JSONResponse({"erro": "Apenas arquivos PDF são aceitos."}, status_code=400)
 
-    tmp_path = os.path.join(UPLOAD_DIR, f"_tmp_{ws.id}.pdf")
     try:
         content = await file.read()
-        with open(tmp_path, "wb") as f:
-            f.write(content)
+        if len(content) > 10 * 1024 * 1024:
+            return JSONResponse({"erro": "Arquivo muito grande. Máximo 10 MB."}, status_code=400)
 
-        dados = extrair_de_pdf(tmp_path)
+        dados = extrair_de_pdf_bytes(content)
 
         if dados is None:
             return JSONResponse(
@@ -128,10 +178,27 @@ async def api_upload(
         return JSONResponse(member.to_dict())
 
     except Exception as e:
-        return JSONResponse({"erro": str(e)}, status_code=500)
-    finally:
-        if os.path.exists(tmp_path):
-            os.remove(tmp_path)
+        return JSONResponse({"erro": "Erro interno ao processar o arquivo."}, status_code=500)
+
+
+@app.post("/api/workspace/{slug}/auth")
+async def api_auth(slug: str, request: Request):
+    ws = get_workspace(slug)
+    if not ws:
+        return JSONResponse({"erro": "Workspace não encontrado."}, status_code=404)
+    if not ws.password_hash:
+        return JSONResponse({"erro": "Workspace não possui senha."}, status_code=400)
+    body = await request.json()
+    password = body.get("password", "")
+    if not check_password(password, ws.password_hash):
+        return JSONResponse({"erro": "Senha incorreta."}, status_code=401)
+    token = _make_session_token(ws.slug)
+    resp = JSONResponse({"ok": True})
+    resp.set_cookie(
+        key=f"ws_{ws.slug}", value=token,
+        httponly=True, max_age=SESSION_TTL, samesite="lax",
+    )
+    return resp
 
 
 @app.post("/api/workspace/{slug}/members")
@@ -139,6 +206,8 @@ async def api_add_member(slug: str, request: Request):
     ws = get_workspace(slug)
     if not ws:
         return JSONResponse({"erro": "Workspace não encontrado."}, status_code=404)
+    if not _require_auth(request, ws):
+        return JSONResponse({"erro": "Acesso negado."}, status_code=403)
     body = await request.json()
     nome = body.get("nome", "").strip()
     curso = body.get("curso", "")
@@ -153,10 +222,12 @@ async def api_add_member(slug: str, request: Request):
 
 
 @app.delete("/api/workspace/{slug}/members/{member_id}")
-async def api_remove_member(slug: str, member_id: int):
+async def api_remove_member(request: Request, slug: str, member_id: int):
     ws = get_workspace(slug)
     if not ws:
         return JSONResponse({"erro": "Workspace não encontrado."}, status_code=404)
+    if not _require_auth(request, ws):
+        return JSONResponse({"erro": "Acesso negado."}, status_code=403)
     ok = remove_member(member_id)
     if not ok:
         return JSONResponse({"erro": "Membro não encontrado."}, status_code=404)
