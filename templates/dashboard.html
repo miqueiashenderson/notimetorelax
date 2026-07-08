@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{{ workspace.name }} — NoTimeToRelax</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+  :root{
+    --bg:        #161616;
+    --surface:   #1f1f1f;
+    --surface-2: #262626;
+    --line:      #3a3a3a;
+    --fg:        #f2f4f8;
+    --dim:       #8d8d8d;
+    --cyan:      #3ddbd9;
+    --magenta:   #ee5396;
+    --green:     #42be65;
+    --yellow:    #d2a106;
+    --purple:    #be95ff;
+    --mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    --sans: 'Inter', -apple-system, 'Segoe UI', sans-serif;
+  }
+
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--fg);
+    font-family:var(--sans);
+    padding:28px 20px 60px;
+  }
+
+  .wrap{max-width:1080px;margin:0 auto;}
+
+  header{margin-bottom:18px;}
+  .eyebrow{
+    font-family:var(--mono);
+    font-size:11px;
+    letter-spacing:.14em;
+    color:var(--cyan);
+    text-transform:uppercase;
+    margin:0 0 8px;
+  }
+  .eyebrow a{color:var(--dim);text-decoration:none;}
+  .eyebrow a:hover{color:var(--cyan);}
+  h1{
+    font-size:26px;
+    font-weight:700;
+    margin:0 0 6px;
+    letter-spacing:-.01em;
+  }
+  .sub{color:var(--dim);font-size:13.5px;margin:0;max-width:620px;line-height:1.5;}
+
+  .disclaimer{
+    margin-top:16px;
+    background:var(--surface);
+    border:1px solid var(--line);
+    border-left:3px solid var(--yellow);
+    border-radius:6px;
+    padding:12px 14px;
+    font-size:12.5px;
+    color:var(--dim);
+    line-height:1.6;
+  }
+  .disclaimer b{color:var(--fg);}
+  .disclaimer code{
+    font-family:var(--mono);
+    background:var(--surface-2);
+    padding:1px 5px;
+    border-radius:3px;
+    color:var(--yellow);
+    font-size:11.5px;
+  }
+
+  .panel{
+    margin-top:22px;
+    background:var(--surface);
+    border:1px solid var(--line);
+    border-radius:10px;
+    padding:16px 18px;
+  }
+  .panel h2{
+    font-family:var(--mono);
+    font-size:11px;
+    letter-spacing:.1em;
+    text-transform:uppercase;
+    color:var(--dim);
+    margin:0 0 12px;
+  }
+
+  .panel-actions{
+    display:flex;
+    gap:8px;
+    flex-wrap:wrap;
+    align-items:center;
+  }
+
+  .btn{
+    font-family:var(--mono);
+    font-size:11px;
+    letter-spacing:.05em;
+    color:var(--cyan);
+    background:transparent;
+    border:1px solid var(--line);
+    padding:6px 12px;
+    border-radius:6px;
+    cursor:pointer;
+    text-decoration:none;
+    display:inline-block;
+  }
+  .btn:hover{border-color:var(--cyan);}
+  .btn-primary{border-color:var(--cyan);}
+  .btn-danger{color:var(--magenta);}
+  .btn-danger:hover{border-color:var(--magenta);}
+
+  .members{display:flex;flex-wrap:wrap;gap:8px;}
+  .chip{
+    display:flex;align-items:center;gap:7px;
+    font-family:var(--mono);
+    font-size:12px;
+    padding:6px 10px;
+    border-radius:20px;
+    border:1px solid var(--line);
+    background:var(--surface-2);
+    cursor:pointer;
+    user-select:none;
+    transition:border-color .15s, opacity .15s;
+  }
+  .chip.off{opacity:.35;}
+  .chip .dot{width:8px;height:8px;border-radius:50%;flex:none;}
+  .chip:hover{border-color:var(--cyan);}
+
+  .toolbar{display:flex;gap:8px;margin-top:12px;}
+
+  .grid-wrap{margin-top:20px;overflow-x:auto;}
+  table{border-collapse:collapse;width:100%;font-family:var(--mono);font-size:12px;}
+  th, td{border:1px solid var(--line);text-align:center;vertical-align:top;padding:0;}
+  th{
+    background:var(--surface-2);
+    color:var(--dim);
+    font-weight:500;
+    padding:9px 4px;
+    letter-spacing:.03em;
+  }
+  .time-col{
+    background:var(--surface-2);
+    color:var(--dim);
+    white-space:nowrap;
+    padding:4px 10px;
+    font-size:11px;
+    text-align:right;
+    vertical-align:middle;
+  }
+  .cell{
+    width:110px;
+    min-height:36px;
+    cursor:pointer;
+    position:relative;
+    padding:4px 5px;
+    line-height:1.3;
+    font-size:10.5px;
+    text-align:left;
+  }
+  .cell:hover{outline:2px solid var(--cyan);outline-offset:-2px;z-index:2;}
+  .cell .name-row{display:flex;align-items:center;gap:4px;white-space:nowrap;}
+  .cell .ndot{width:5px;height:5px;border-radius:50%;flex:none;display:inline-block;}
+  .cell .nname{overflow:hidden;text-overflow:ellipsis;}
+  .cell .summary{font-size:10px;opacity:.6;text-align:center;padding:6px 0;width:100%;}
+  .cell.selected{outline:2px solid var(--fg);outline-offset:-2px;}
+
+  .legend{display:flex;align-items:center;gap:14px;margin-top:14px;font-family:var(--mono);font-size:11px;color:var(--dim);flex-wrap:wrap;}
+  .legend .scale{display:flex;height:10px;width:160px;border-radius:3px;overflow:hidden;}
+  .legend .scale div{flex:1;}
+
+  .detail{
+    margin-top:20px;
+    display:none;
+  }
+  .detail.show{display:block;}
+  .detail-head{
+    font-family:var(--mono);
+    font-size:12px;
+    color:var(--cyan);
+    margin-bottom:10px;
+  }
+  .cols2{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+  .list h3{
+    font-family:var(--mono);
+    font-size:10.5px;
+    letter-spacing:.08em;
+    text-transform:uppercase;
+    margin:0 0 8px;
+  }
+  .list.free h3{color:var(--green);}
+  .list.busy h3{color:var(--magenta);}
+  .list ul{list-style:none;margin:0;padding:0;font-size:13px;line-height:2;}
+  .list li{display:flex;align-items:center;gap:8px;}
+  .list .dot{width:7px;height:7px;border-radius:50%;flex:none;}
+
+  .empty-state{
+    text-align:center;
+    padding:40px 20px;
+    color:var(--dim);
+  }
+  .empty-state p{font-size:14px;line-height:1.6;}
+  .empty-state .btn{margin-top:16px;}
+
+  footer{margin-top:26px;color:var(--dim);font-size:11px;font-family:var(--mono);text-align:center;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <p class="eyebrow"><a href="/">NoTimeToRelax</a> &middot; {{ workspace.name }}</p>
+    <h1>Disponibilidade semanal da equipe</h1>
+    <p class="sub" id="subtitle">Grade construída a partir dos horários de aula.</p>
+
+    <div class="disclaimer">
+      <b>O que esta grade mostra:</b> apenas os horários em que cada pessoa tem <b>aula obrigatória</b> matriculada, segundo os comprovantes/atestados SIGAA enviados. Uma célula "livre" significa — <b>sem aula</b> — não confirma disponibilidade real para reunião.<br><br>
+      <b>O que não está aqui:</b> estágios, monitorias, provas, compromissos pessoais ou qualquer coisa fora da grade curricular.
+    </div>
+  </header>
+
+  {% if members_json and members_json != '[]' %}
+  <section class="panel">
+    <div class="panel-actions" style="justify-content:space-between;">
+      <h2 style="margin:0;">Integrantes (clique para incluir/excluir)</h2>
+      <a href="/workspace/{{ workspace.slug }}/upload" class="btn btn-primary">+ Enviar PDF</a>
+    </div>
+    <div class="members" id="members"></div>
+    <div class="toolbar">
+      <button class="btn" id="selectAll">Selecionar todos</button>
+      <button class="btn" id="selectNone">Limpar seleção</button>
+    </div>
+  </section>
+
+  <section class="grid-wrap">
+    <table id="grid"></table>
+    <div class="legend">
+      <span>Menos livres</span>
+      <div class="scale">
+        <div style="background:#3a1620"></div>
+        <div style="background:#5c1e2e"></div>
+        <div style="background:#7a2a3c"></div>
+        <div style="background:#8d6b1a"></div>
+        <div style="background:#3f7a4a"></div>
+        <div style="background:#42be65"></div>
+      </div>
+      <span>Mais livres</span>
+    </div>
+  </section>
+
+  <section class="detail" id="detail">
+    <div class="panel">
+      <div class="detail-head" id="detailHead"></div>
+      <div class="cols2">
+        <div class="list free">
+          <h3>Livres</h3>
+          <ul id="freeList"></ul>
+        </div>
+        <div class="list busy">
+          <h3>Em aula</h3>
+          <ul id="busyList"></ul>
+        </div>
+      </div>
+    </div>
+  </section>
+  {% else %}
+  <section class="panel">
+    <div class="panel-actions" style="justify-content:space-between;">
+      <h2 style="margin:0;">Integrantes</h2>
+      <a href="/workspace/{{ workspace.slug }}/upload" class="btn btn-primary">+ Enviar PDF</a>
+    </div>
+    <div class="empty-state">
+      <p>Nenhum membro cadastrado ainda.</p>
+      <p>Compartilhe o link com sua equipe para que cada um envie<br>o comprovante de matrícula (PDF do SIGAA).</p>
+      <a href="/workspace/{{ workspace.slug }}/upload" class="btn btn-primary">Enviar meu PDF</a>
+    </div>
+  </section>
+  {% endif %}
+
+  <footer>
+    <a href="/" style="color:var(--dim);text-decoration:none;">NoTimeToRelax</a>
+  </footer>
+</div>
+
+<script>
+const DAYS = ["Seg","Ter","Qua","Qui","Sex"];
+const SLOTS = [
+  "07:00-08:00","08:00-09:00","09:00-10:00","10:10-11:10","11:10-12:10",
+  "13:00-14:00","14:00-15:00","15:00-16:00","16:10-17:10","17:10-18:10",
+  "18:30-19:20","19:20-20:10","20:20-21:10","21:10-22:00"
+];
+
+let MEMBERS = {{ members_json|safe }};
+
+const active = new Set(MEMBERS.map(m=>m.name));
+
+function isBusy(m, d, s){
+  return m.busy.some(b => b[0]===d && b[1]===s);
+}
+
+function renderMembers(){
+  const box = document.getElementById('members');
+  if(!box) return;
+  box.innerHTML = '';
+  MEMBERS.forEach(m=>{
+    const chip = document.createElement('div');
+    chip.className = 'chip' + (active.has(m.name)?'':' off');
+    chip.innerHTML = `<span class="dot" style="background:${m.color}"></span>${m.name}`;
+    chip.onclick = ()=>{
+      active.has(m.name) ? active.delete(m.name) : active.add(m.name);
+      renderMembers();
+      renderGrid();
+    };
+    box.appendChild(chip);
+  });
+}
+
+function colorForRatio(r){
+  const stops = [
+    [0.0,[58,22,32]],[0.2,[92,30,46]],[0.4,[122,42,60]],
+    [0.6,[141,107,26]],[0.8,[63,122,74]],[1.0,[66,190,101]],
+  ];
+  for(let i=0;i<stops.length-1;i++){
+    const [r0,c0]=stops[i], [r1,c1]=stops[i+1];
+    if(r>=r0 && r<=r1){
+      const t=(r-r0)/(r1-r0||1);
+      const c=c0.map((v,idx)=>Math.round(v+(c1[idx]-v)*t));
+      return `rgb(${c[0]},${c[1]},${c[2]})`;
+    }
+  }
+  return `rgb(66,190,101)`;
+}
+
+let selectedCell = null;
+
+function renderGrid(){
+  const table = document.getElementById('grid');
+  if(!table) return;
+  table.innerHTML = '';
+
+  const thead = document.createElement('tr');
+  thead.innerHTML = '<th class="time-col">Horário</th>' + DAYS.map(d=>`<th>${d}</th>`).join('');
+  table.appendChild(thead);
+
+  const pool = MEMBERS.filter(m=>active.has(m.name));
+  const total = pool.length || 1;
+
+  SLOTS.forEach((label, s)=>{
+    const row = document.createElement('tr');
+    const timeTd = document.createElement('td');
+    timeTd.className = 'time-col';
+    timeTd.textContent = label;
+    row.appendChild(timeTd);
+
+    DAYS.forEach((_, d)=>{
+      const free = pool.filter(m=>!isBusy(m,d,s));
+      const freeCount = free.length;
+      const ratio = freeCount/total;
+      const td = document.createElement('td');
+      td.className = 'cell';
+      td.style.background = pool.length ? colorForRatio(ratio) : '#222';
+
+      if (!pool.length) {
+        td.innerHTML = `<div class="summary">—</div>`;
+      } else if (freeCount === 0) {
+        td.innerHTML = `<div class="summary">todos ocupados</div>`;
+      } else if (freeCount === total) {
+        td.innerHTML = `<div class="summary">todos livres</div>`;
+      } else {
+        let html = '';
+        free.forEach(m => {
+          html += `<div class="name-row"><span class="ndot" style="background:${m.color}"></span><span class="nname">${m.name}</span></div>`;
+        });
+        td.innerHTML = html;
+      }
+
+      td.onclick = ()=>{
+        document.querySelectorAll('.cell.selected').forEach(c=>c.classList.remove('selected'));
+        td.classList.add('selected');
+        showDetail(d,s,label);
+      };
+      row.appendChild(td);
+    });
+    table.appendChild(row);
+  });
+}
+
+function showDetail(d,s,label){
+  const pool = MEMBERS.filter(m=>active.has(m.name));
+  const free = pool.filter(m=>!isBusy(m,d,s));
+  const busy = pool.filter(m=>isBusy(m,d,s));
+
+  document.getElementById('detailHead').textContent = `${DAYS[d]} · ${label}`;
+  document.getElementById('freeList').innerHTML = free.map(m=>
+    `<li><span class="dot" style="background:${m.color}"></span>${m.name}</li>`).join('') || '<li style="color:var(--dim)">ninguém selecionado</li>';
+  document.getElementById('busyList').innerHTML = busy.map(m=>
+    `<li><span class="dot" style="background:${m.color}"></span>${m.name}</li>`).join('') || '<li style="color:var(--dim)">ninguém</li>';
+  document.getElementById('detail').classList.add('show');
+}
+
+document.getElementById('selectAll')?.addEventListener('click', ()=>{
+  MEMBERS.forEach(m=>active.add(m.name));
+  renderMembers(); renderGrid();
+});
+document.getElementById('selectNone')?.addEventListener('click', ()=>{
+  active.clear();
+  renderMembers(); renderGrid();
+});
+
+// Update subtitle with count
+const sub = document.getElementById('subtitle');
+if(sub && MEMBERS.length > 0){
+  sub.textContent = `Grade construída a partir dos horários de aula de ${MEMBERS.length} integrante${MEMBERS.length !== 1 ? 's' : ''}.`;
+}
+
+renderMembers();
+renderGrid();
+</script>
+</body>
+</html>

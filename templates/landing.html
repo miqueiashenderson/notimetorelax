@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NoTimeToRelax — Grade de disponibilidade da sua equipe</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+  :root{
+    --bg:        #161616;
+    --surface:   #1f1f1f;
+    --surface-2: #262626;
+    --line:      #3a3a3a;
+    --fg:        #f2f4f8;
+    --dim:       #8d8d8d;
+    --cyan:      #3ddbd9;
+    --green:     #42be65;
+    --sans: 'Inter', -apple-system, 'Segoe UI', sans-serif;
+    --mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--fg);
+    font-family:var(--sans);
+    min-height:100vh;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:20px;
+  }
+
+  .card{
+    width:100%;
+    max-width:460px;
+  }
+
+  .logo{
+    text-align:center;
+    margin-bottom:32px;
+  }
+  .logo h1{
+    font-family:var(--mono);
+    font-size:22px;
+    font-weight:700;
+    margin:0 0 6px;
+    letter-spacing:-.01em;
+  }
+  .logo .tag{
+    font-size:13px;
+    color:var(--dim);
+    line-height:1.5;
+    margin:0;
+  }
+
+  .panel{
+    background:var(--surface);
+    border:1px solid var(--line);
+    border-radius:10px;
+    padding:24px;
+    margin-bottom:16px;
+  }
+  .panel:last-child{margin-bottom:0;}
+
+  .panel h2{
+    font-family:var(--mono);
+    font-size:11px;
+    letter-spacing:.1em;
+    text-transform:uppercase;
+    color:var(--dim);
+    margin:0 0 16px;
+  }
+
+  label{
+    display:block;
+    font-size:12.5px;
+    color:var(--dim);
+    margin-bottom:6px;
+  }
+
+  input[type="text"]{
+    width:100%;
+    padding:10px 12px;
+    border-radius:6px;
+    border:1px solid var(--line);
+    background:var(--surface-2);
+    color:var(--fg);
+    font-size:14px;
+    font-family:var(--sans);
+    outline:none;
+    transition:border-color .15s;
+  }
+  input[type="text"]:focus{border-color:var(--cyan);}
+  input[type="text"]::placeholder{color:var(--dim);opacity:.6;}
+
+  .btn{
+    display:block;
+    width:100%;
+    margin-top:12px;
+    padding:10px;
+    border-radius:6px;
+    border:1px solid var(--cyan);
+    background:transparent;
+    color:var(--cyan);
+    font-family:var(--mono);
+    font-size:12px;
+    letter-spacing:.05em;
+    cursor:pointer;
+    transition:background .15s, color .15s;
+  }
+  .btn:hover{
+    background:var(--cyan);
+    color:var(--bg);
+  }
+
+  .erro{
+    margin-top:16px;
+    background:var(--surface);
+    border:1px solid #7a2a3c;
+    border-left:3px solid #ee5396;
+    border-radius:6px;
+    padding:12px 14px;
+    font-size:13px;
+    color:#ee5396;
+  }
+
+  footer{
+    text-align:center;
+    margin-top:32px;
+    color:var(--dim);
+    font-size:11px;
+    font-family:var(--mono);
+  }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="logo">
+    <h1>NoTimeToRelax</h1>
+    <p class="tag">Grade de disponibilidade da sua equipe<br>baseada nos comprovantes de matrícula SIGAA</p>
+  </div>
+
+  {% if erro %}
+  <div class="erro">{{ erro }}</div>
+  {% endif %}
+
+  <div class="panel">
+    <h2>Criar workspace</h2>
+    <form id="createForm" onsubmit="return criarWorkspace(event)">
+      <label for="nome">Nome da equipe / projeto</label>
+      <input type="text" id="nome" placeholder="ex: Minha Equipe" required autocomplete="off">
+      <button class="btn" type="submit">Criar workspace</button>
+    </form>
+  </div>
+
+  <div class="panel">
+    <h2>Acessar workspace existente</h2>
+    <form action="/" method="get" onsubmit="return acessarWorkspace(event)">
+      <label for="slug">Link do workspace</label>
+      <input type="text" id="slug" placeholder="ex: minha-equipe" autocomplete="off">
+      <button class="btn" type="submit">Acessar</button>
+    </form>
+  </div>
+
+  <footer>
+    <a href="https://github.com/anomalyco/opencode" style="color:var(--dim);text-decoration:none;">NoTimeToRelax</a>
+  </footer>
+</div>
+
+<script>
+async function criarWorkspace(e){
+  e.preventDefault();
+  const nome = document.getElementById('nome').value.trim();
+  if(!nome) return false;
+  const form = new FormData();
+  form.append('name', nome);
+  try{
+    const r = await fetch('/api/workspace', {method:'POST', body:form});
+    const data = await r.json();
+    if(data.erro){ alert(data.erro); return false; }
+    window.location.href = '/workspace/' + data.slug;
+  }catch(err){
+    alert('Erro ao criar workspace.');
+  }
+  return false;
+}
+
+function acessarWorkspace(e){
+  e.preventDefault();
+  let slug = document.getElementById('slug').value.trim();
+  if(!slug) return false;
+  slug = slug.replace(/^.*\/workspace\//, '').replace(/\/+$/, '').trim();
+  if(!slug) return false;
+  window.location.href = '/workspace/' + slug;
+  return false;
+}
+
+function handleKey(e){
+  if(e.key === 'Enter'){
+    const nome = document.getElementById('nome').value.trim();
+    const slug = document.getElementById('slug').value.trim();
+    if(nome && !slug) criarWorkspace(e);
+    else if(slug) acessarWorkspace(e);
+  }
+}
+document.addEventListener('keydown', handleKey);
+</script>
+</body>
+</html>

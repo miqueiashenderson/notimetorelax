@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Upload — {{ workspace.name }} — NoTimeToRelax</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+  :root{
+    --bg:        #161616;
+    --surface:   #1f1f1f;
+    --surface-2: #262626;
+    --line:      #3a3a3a;
+    --fg:        #f2f4f8;
+    --dim:       #8d8d8d;
+    --cyan:      #3ddbd9;
+    --green:     #42be65;
+    --magenta:   #ee5396;
+    --mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    --sans: 'Inter', -apple-system, 'Segoe UI', sans-serif;
+  }
+
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--fg);
+    font-family:var(--sans);
+    padding:28px 20px 60px;
+  }
+  .wrap{max-width:580px;margin:0 auto;}
+
+  header{margin-bottom:24px;}
+  .back{
+    font-family:var(--mono);
+    font-size:11px;
+    letter-spacing:.05em;
+    margin-bottom:10px;
+  }
+  .back a{color:var(--dim);text-decoration:none;}
+  .back a:hover{color:var(--cyan);}
+  h1{font-size:24px;font-weight:700;margin:0 0 6px;}
+  .sub{color:var(--dim);font-size:13.5px;margin:0;line-height:1.5;}
+
+  .dropzone{
+    margin-top:20px;
+    background:var(--surface);
+    border:2px dashed var(--line);
+    border-radius:10px;
+    padding:48px 20px;
+    text-align:center;
+    cursor:pointer;
+    transition:border-color .2s, background .2s;
+  }
+  .dropzone.dragover{
+    border-color:var(--cyan);
+    background:var(--surface-2);
+  }
+  .dropzone.has-file{border-style:solid;border-color:var(--green);padding:24px 20px;}
+  .dropzone .icon{font-size:36px;color:var(--dim);margin-bottom:10px;}
+  .dropzone .text{font-size:14px;color:var(--dim);line-height:1.5;}
+  .dropzone .text b{color:var(--fg);}
+  .dropzone .hint{font-size:11px;color:var(--dim);margin-top:8px;opacity:.6;}
+  .dropzone input[type="file"]{display:none;}
+
+  .preview{
+    margin-top:20px;
+    display:none;
+  }
+  .preview.show{display:block;}
+
+  .card{
+    background:var(--surface);
+    border:1px solid var(--line);
+    border-radius:10px;
+    padding:20px;
+  }
+  .card table{width:100%;font-size:13.5px;}
+  .card td{padding:6px 0;}
+  .card td:first-child{color:var(--dim);padding-right:16px;white-space:nowrap;}
+  .card td:last-child{color:var(--fg);}
+
+  .actions{
+    display:flex;
+    gap:10px;
+    margin-top:20px;
+  }
+
+  .btn{
+    font-family:var(--mono);
+    font-size:12px;
+    letter-spacing:.05em;
+    padding:10px 20px;
+    border-radius:6px;
+    cursor:pointer;
+    text-decoration:none;
+    display:inline-block;
+    text-align:center;
+  }
+  .btn-primary{
+    background:var(--cyan);
+    color:var(--bg);
+    border:none;
+  }
+  .btn-primary:hover{opacity:.85;}
+  .btn-secondary{
+    background:transparent;
+    color:var(--dim);
+    border:1px solid var(--line);
+  }
+  .btn-secondary:hover{border-color:var(--cyan);color:var(--fg);}
+
+  .erro{
+    margin-top:16px;
+    background:var(--surface);
+    border:1px solid #7a2a3c;
+    border-left:3px solid var(--magenta);
+    border-radius:6px;
+    padding:12px 14px;
+    font-size:13px;
+    color:var(--magenta);
+  }
+  .sucesso{
+    margin-top:16px;
+    background:var(--surface);
+    border:1px solid #1a6b3f;
+    border-left:3px solid var(--green);
+    border-radius:6px;
+    padding:16px 14px;
+    font-size:13px;
+    color:var(--green);
+  }
+  .sucesso b{color:var(--fg);}
+  .sucesso a{color:var(--cyan);}
+
+  .spinner{display:inline-block;width:16px;height:16px;border:2px solid var(--dim);border-top-color:var(--cyan);border-radius:50%;animation:spin .6s linear infinite;vertical-align:middle;margin-right:8px;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+
+  footer{margin-top:32px;text-align:center;color:var(--dim);font-size:11px;font-family:var(--mono);}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <p class="back"><a href="/workspace/{{ workspace.slug }}">&larr; Voltar ao dashboard</a></p>
+    <h1>Enviar comprovante</h1>
+    <p class="sub">Faça upload do seu PDF de matrícula (comprovante SIGAA) para preencher seus horários na grade da equipe.</p>
+  </header>
+
+  <div class="dropzone" id="dropzone">
+    <div class="icon">&#128196;</div>
+    <div class="text">Arraste o PDF aqui ou <b>clique para selecionar</b></div>
+    <div class="hint">Apenas arquivos .pdf &middot; comprovante de matrícula SIGAA</div>
+    <input type="file" id="fileInput" accept=".pdf">
+  </div>
+
+  <div class="erro" id="erro" style="display:none;"></div>
+
+  <div class="preview" id="preview">
+    <div class="card">
+      <table>
+        <tr><td>Nome</td><td id="pvNome"></td></tr>
+        <tr><td>Curso</td><td id="pvCurso"></td></tr>
+        <tr><td>Horários ocupados</td><td id="pvTotal"></td></tr>
+      </table>
+    </div>
+    <div class="actions">
+      <button class="btn btn-primary" id="btnConfirmar">Confirmar e salvar</button>
+      <button class="btn btn-secondary" onclick="resetUpload()">Cancelar</button>
+    </div>
+  </div>
+
+  <div class="sucesso" id="sucesso" style="display:none;">
+    <b>Pronto!</b> Seus horários foram salvos na grade.<br>
+    <a href="/workspace/{{ workspace.slug }}">Voltar ao dashboard</a>
+  </div>
+
+  <footer>
+    <a href="/" style="color:var(--dim);text-decoration:none;">NoTimeToRelax</a>
+  </footer>
+</div>
+
+<script>
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('fileInput');
+const erro = document.getElementById('erro');
+const preview = document.getElementById('preview');
+const sucesso = document.getElementById('sucesso');
+const btnConfirmar = document.getElementById('btnConfirmar');
+
+let extractedData = null;
+
+dropzone.addEventListener('click', () => fileInput.click());
+dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('dragover'); });
+dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
+dropzone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropzone.classList.remove('dragover');
+  if(e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', () => {
+  if(fileInput.files.length) handleFile(fileInput.files[0]);
+});
+
+function resetUpload(){
+  erro.style.display = 'none';
+  preview.classList.remove('show');
+  sucesso.style.display = 'none';
+  dropzone.style.display = 'block';
+  dropzone.classList.remove('has-file');
+  fileInput.value = '';
+  extractedData = null;
+}
+
+async function handleFile(file){
+  if(!file.name.toLowerCase().endsWith('.pdf')){
+    showErro('Apenas arquivos PDF são aceitos.');
+    return;
+  }
+
+  erro.style.display = 'none';
+  preview.classList.remove('show');
+  sucesso.style.display = 'none';
+  dropzone.style.display = 'block';
+  dropzone.classList.add('has-file');
+  dropzone.querySelector('.text').innerHTML = 'Processando <span class="spinner"></span>';
+
+  const form = new FormData();
+  form.append('file', file);
+
+  try{
+    const r = await fetch('/api/workspace/{{ workspace.slug }}/upload?preview=true', {
+      method:'POST',
+      body:form
+    });
+    const data = await r.json();
+
+    if(data.erro){
+      showErro(data.erro);
+      resetUpload();
+      return;
+    }
+
+    extractedData = data;
+    document.getElementById('pvNome').textContent = data.nome;
+    document.getElementById('pvCurso').textContent = data.curso;
+    document.getElementById('pvTotal').textContent = data.total + ' horários';
+
+    dropzone.style.display = 'none';
+    preview.classList.add('show');
+
+  }catch(err){
+    showErro('Erro ao processar o PDF. Verifique se é um comprovante SIGAA válido.');
+    resetUpload();
+  }
+}
+
+btnConfirmar.addEventListener('click', async () => {
+  if(!extractedData) return;
+  btnConfirmar.disabled = true;
+  btnConfirmar.innerHTML = '<span class="spinner"></span> Salvando...';
+
+  try{
+    const r = await fetch('/api/workspace/{{ workspace.slug }}/members', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        nome: extractedData.nome,
+        curso: extractedData.curso,
+        busy: extractedData.busy,
+        force: true
+      })
+    });
+    const data = await r.json();
+
+    if(data.erro){
+      showErro(data.erro);
+      btnConfirmar.disabled = false;
+      btnConfirmar.textContent = 'Confirmar e salvar';
+      return;
+    }
+
+    preview.classList.remove('show');
+    sucesso.style.display = 'block';
+
+  }catch(err){
+    showErro('Erro ao salvar. Tente novamente.');
+    btnConfirmar.disabled = false;
+    btnConfirmar.textContent = 'Confirmar e salvar';
+  }
+});
+
+function showErro(msg){
+  erro.textContent = msg;
+  erro.style.display = 'block';
+}
+</script>
+</body>
+</html>
