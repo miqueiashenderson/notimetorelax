@@ -238,7 +238,10 @@ async function handleFile(file){
 
     if(data.erro){
       showErro(data.erro);
-      resetUpload();
+      dropzone.style.display = 'block';
+      dropzone.classList.remove('has-file');
+      dropzone.querySelector('.text').innerHTML = 'Arraste o PDF aqui ou <b>clique para selecionar</b>';
+      fileInput.value = '';
       return;
     }
 
@@ -252,7 +255,9 @@ async function handleFile(file){
 
   }catch(err){
     showErro('Erro ao processar o PDF. Verifique se é um comprovante SIGAA válido.');
-    resetUpload();
+    dropzone.style.display = 'block';
+    dropzone.classList.remove('has-file');
+    fileInput.value = '';
   }
 }
 
