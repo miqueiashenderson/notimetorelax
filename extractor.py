@@ -1,5 +1,5 @@
 import re, unicodedata
-import fitz
+from pypdf import PdfReader
 
 DIAS = ["Seg", "Ter", "Qua", "Qui", "Sex"]
 SLOTS = [
@@ -11,16 +11,16 @@ SLOTS = [
 
 def extrair_texto(path: str) -> str:
     try:
-        with fitz.open(path) as doc:
-            return "\n".join(pag.get_text() for pag in doc)
+        reader = PdfReader(path)
+        return "\n".join(pag.extract_text() or "" for pag in reader.pages)
     except Exception:
         return ""
 
 
 def extrair_de_pdf_bytes(content: bytes):
     try:
-        with fitz.open(stream=content, filetype="pdf") as doc:
-            texto = "\n".join(pag.get_text() for pag in doc)
+        reader = PdfReader(content)
+        texto = "\n".join(pag.extract_text() or "" for pag in reader.pages)
         if not texto.strip():
             return None
         return extrair_completo(texto)

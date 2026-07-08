@@ -2,13 +2,24 @@ import os, time, hashlib, hmac, secrets
 from fastapi import FastAPI, Request, UploadFile, File, Form, Query
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
-from contextlib import asynccontextmanager
 
 from database import init_db, create_workspace, get_workspace, get_members, add_member, remove_member, check_password
 from extractor import extrair_de_pdf_bytes
 
 SESSION_TTL = 86400 * 30
 SESSION_SECRET = os.environ.get("SESSION_SECRET") or secrets.token_hex(32)
+
+_db_ready = False
+
+
+def _ensure_db():
+    global _db_ready
+    if not _db_ready:
+        try:
+            init_db()
+        except Exception:
+            pass
+        _db_ready = True
 
 
 def _make_session_token(slug: str) -> str:
@@ -36,13 +47,14 @@ def _require_auth(request: Request, ws) -> bool:
     return not ws.password_hash or _check_session(request, ws.slug)
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    init_db()
-    yield
+app = FastAPI(title="NoTimeToRelax")
 
 
-app = FastAPI(title="NoTimeToRelax", lifespan=lifespan)
+@app.middleware("http")
+async def ensure_db(request: Request, call_next):
+    _ensure_db()
+    return await call_next(request)
+
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 templates = Jinja2Templates(directory=os.path.join(BASE_DIR, "templates"))
