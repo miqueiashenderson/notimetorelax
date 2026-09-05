@@ -74,6 +74,83 @@
     margin:0 0 16px;
   }
 
+  .userbar{
+    display:flex;
+    align-items:center;
+    gap:12px;
+    background:var(--surface);
+    border:1px solid var(--line);
+    border-radius:10px;
+    padding:12px 16px;
+    margin-bottom:16px;
+  }
+  .userbar img{
+    width:36px;
+    height:36px;
+    border-radius:50%;
+    border:2px solid var(--cyan);
+    object-fit:cover;
+  }
+  .userbar .user-meta{
+    flex:1;
+    min-width:0;
+  }
+  .userbar .user-name{
+    font-size:13.5px;
+    font-weight:600;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+  }
+  .userbar .user-email{
+    font-size:11.5px;
+    color:var(--dim);
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+  }
+  .userbar a{
+    font-family:var(--mono);
+    font-size:11px;
+    letter-spacing:.04em;
+    color:var(--dim);
+    text-decoration:none;
+    border:1px solid var(--line);
+    border-radius:6px;
+    padding:6px 12px;
+    white-space:nowrap;
+  }
+  .userbar a:hover{color:var(--cyan);border-color:var(--cyan);}
+
+  .google-zone{
+    text-align:center;
+    padding:8px 0 4px;
+  }
+  .google-zone p{
+    color:var(--dim);
+    font-size:13px;
+    line-height:1.6;
+    margin:0 0 18px;
+  }
+  .btn-google{
+    display:inline-flex;
+    align-items:center;
+    gap:10px;
+    background:var(--fg);
+    color:var(--bg);
+    border:none;
+    border-radius:6px;
+    padding:10px 22px;
+    font-family:var(--sans);
+    font-size:14px;
+    font-weight:600;
+    cursor:pointer;
+    text-decoration:none;
+    transition:opacity .15s;
+  }
+  .btn-google:hover{opacity:.88;}
+  .btn-google img{width:18px;height:18px;}
+
   label{
     display:block;
     font-size:12.5px;
@@ -110,6 +187,8 @@
     letter-spacing:.05em;
     cursor:pointer;
     transition:background .15s, color .15s;
+    text-decoration:none;
+    text-align:center;
   }
   .btn:hover{
     background:var(--cyan);
@@ -143,9 +222,31 @@
     <p class="tag">Grade de disponibilidade da sua equipe<br>baseada nos comprovantes de matrícula SIGAA</p>
   </div>
 
-  {% if erro %}
-  <div class="erro">{{ erro }}</div>
-  {% endif %}
+  {% if google_login and not user %}
+    {% if erro %}
+    <div class="erro">{{ erro }}</div>
+    {% endif %}
+    <div class="panel">
+      <div class="google-zone">
+        <h2>Acesso</h2>
+        <p>Entre com sua conta Google para criar ou acessar um workspace.</p>
+        <a class="btn-google" href="/auth/google/login?next={{ request.url.path }}">Entrar com Google</a>
+      </div>
+    </div>
+  {% else %}
+    {% if user %}
+    <div class="userbar">
+      <div class="user-meta">
+        <div class="user-name">{{ user.google_name or user.google_email }}</div>
+        <div class="user-email">{{ user.google_email }}</div>
+      </div>
+      <a href="/auth/logout">Sair</a>
+    </div>
+    {% endif %}
+
+    {% if erro %}
+    <div class="erro">{{ erro }}</div>
+    {% endif %}
 
     <div class="panel">
       <h2>Criar workspace</h2>
@@ -158,14 +259,15 @@
       </form>
     </div>
 
-  <div class="panel">
-    <h2>Acessar workspace existente</h2>
-    <form action="/" method="get" onsubmit="return acessarWorkspace(event)">
-      <label for="slug">Link do workspace</label>
-      <input type="text" id="slug" placeholder="ex: minha-equipe" autocomplete="off">
-      <button class="btn" type="submit">Acessar</button>
-    </form>
-  </div>
+    <div class="panel">
+      <h2>Acessar workspace existente</h2>
+      <form action="/" method="get" onsubmit="return acessarWorkspace(event)">
+        <label for="slug">Link do workspace</label>
+        <input type="text" id="slug" placeholder="ex: minha-equipe" autocomplete="off">
+        <button class="btn" type="submit">Acessar</button>
+      </form>
+    </div>
+  {% endif %}
 
   <footer>
     <a href="/" style="color:var(--dim);text-decoration:none;">NoTimeToRelax</a>
@@ -173,11 +275,33 @@
 </div>
 
 <script>
+function slugify(text){
+  return text.toString().toLowerCase().trim()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^\w\s-]/g, '')
+    .replace(/[\s_-]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
 async function criarWorkspace(e){
   e.preventDefault();
   const nome = document.getElementById('nome').value.trim();
   if(!nome) return false;
+  const baseSlug = slugify(nome);
   const password = document.getElementById('createPassword').value.trim();
+
+  try {
+    const check = await fetch('/api/workspace/' + encodeURIComponent(baseSlug) + '/exists');
+    const checkData = await check.json();
+    if (checkData.exists) {
+      const msg = `O workspace "${checkData.name}" já existe!\n\nDeseja ACESSAR o workspace existente?\n(Clique em OK para acessar ou Cancelar para criar outro com sufixo)`;
+      if (confirm(msg)) {
+        window.location.href = '/workspace/' + checkData.slug;
+        return false;
+      }
+    }
+  } catch(err) {}
+
   const form = new FormData();
   form.append('name', nome);
   if(password) form.append('password', password);
@@ -197,6 +321,7 @@ function acessarWorkspace(e){
   let slug = document.getElementById('slug').value.trim();
   if(!slug) return false;
   slug = slug.replace(/^.*\/workspace\//, '').replace(/\/+$/, '').trim();
+  slug = slugify(slug);
   if(!slug) return false;
   window.location.href = '/workspace/' + slug;
   return false;

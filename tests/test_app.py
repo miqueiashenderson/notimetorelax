@@ -1,6 +1,15 @@
 import pytest
 from fastapi.testclient import TestClient
 
+from database import get_or_create_user, add_member
+
+
+def _login(client, sub, email, name=""):
+    import main as mm
+    user = get_or_create_user(sub, email, name)
+    client.cookies.set("user_session", mm._make_user_session_token(user.id))
+    return user
+
 
 class TestLanding:
     def test_landing_page(self, client):
@@ -188,3 +197,127 @@ class TestUploadAPI:
 class TestErrorHandling:
     def test_middleware_catches_db_errors(self, client):
         pass
+
+
+class TestGoogleGate:
+    def test_landing_shows_google_login_when_configured(self, client, monkeypatch):
+        import main as mm
+        monkeypatch.setattr(mm, "GOOGLE_CLIENT_ID", "fake-id")
+        resp = client.get("/")
+        assert resp.status_code == 200
+        assert "Entrar com Google" in resp.text
+        assert "Criar workspace" not in resp.text
+
+    def test_landing_hides_google_login_when_logged(self, client, monkeypatch):
+        import main as mm
+        monkeypatch.setattr(mm, "GOOGLE_CLIENT_ID", "fake-id")
+        _login(client, "sub-1", "ana@x.com", "Ana")
+        resp = client.get("/")
+        assert "Entrar com Google" not in resp.text
+        assert "Criar workspace" in resp.text
+        assert "Ana" in resp.text
+
+    def test_landing_works_without_google_configured(self, client):
+        resp = client.get("/")
+        assert resp.status_code == 200
+        assert "Criar workspace" in resp.text
+
+    def test_dashboard_redirects_to_google_when_not_logged(self, client, workspace, monkeypatch):
+        import main as mm
+        monkeypatch.setattr(mm, "GOOGLE_CLIENT_ID", "fake-id")
+        resp = client.get(f"/workspace/{workspace.slug}", follow_redirects=False)
+        assert resp.status_code == 302
+        assert "/auth/google/login" in resp.headers["location"]
+
+    def test_google_login_route_builds_redirect(self, client, monkeypatch):
+        import main as mm
+        monkeypatch.setattr(mm, "GOOGLE_CLIENT_ID", "fake-id")
+        resp = client.get("/auth/google/login", follow_redirects=False)
+        assert resp.status_code == 302
+        assert "accounts.google.com" in resp.headers["location"]
+        assert "oauth_state" in resp.cookies
+
+    def test_create_workspace_requires_google(self, client, monkeypatch):
+        import main as mm
+        monkeypatch.setattr(mm, "GOOGLE_CLIENT_ID", "fake-id")
+        resp = client.post("/api/workspace", data={"name": "X"})
+        assert resp.status_code == 401
+
+    def test_members_api_requires_google(self, client, workspace, monkeypatch):
+        import main as mm
+        monkeypatch.setattr(mm, "GOOGLE_CLIENT_ID", "fake-id")
+        resp = client.get(f"/api/workspace/{workspace.slug}/members")
+        assert resp.status_code == 401
+
+
+class TestExtraBusyAPI:
+    def test_update_extra_busy_as_owner(self, client, workspace):
+        user = _login(client, "sub-ana", "ana@x.com", "Ana")
+        member, _ = add_member(workspace.id, "Ana", "CC", [[0, 0]], user_id=user.id)
+        resp = client.patch(
+            f"/api/workspace/{workspace.slug}/members/{member.id}/extra-busy",
+            json={"extra_busy": [[2, 3], [4, 5]]},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["extra_busy"] == [[2, 3], [4, 5]]
+
+    def test_update_extra_busy_filters_invalid_slots(self, client, workspace):
+        user = _login(client, "sub-ana", "ana@x.com", "Ana")
+        member, _ = add_member(workspace.id, "Ana", "CC", [], user_id=user.id)
+        resp = client.patch(
+            f"/api/workspace/{workspace.slug}/members/{member.id}/extra-busy",
+            json={"extra_busy": [[0, 0], "x", [1, "a"]]},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["extra_busy"] == [[0, 0]]
+
+    def test_update_extra_busy_not_owner(self, client, workspace):
+        user = _login(client, "sub-ana", "ana@x.com", "Ana")
+        member, _ = add_member(workspace.id, "Ana", "CC", [], user_id=user.id)
+        _login(client, "sub-bob", "bob@x.com", "Bob")
+        resp = client.patch(
+            f"/api/workspace/{workspace.slug}/members/{member.id}/extra-busy",
+            json={"extra_busy": [[0, 0]]},
+        )
+        assert resp.status_code == 403
+
+    def test_update_extra_busy_unclaimed(self, client, workspace, members):
+        _login(client, "sub-ana", "ana@x.com", "Ana")
+        resp = client.patch(
+            f"/api/workspace/{workspace.slug}/members/{members[0].id}/extra-busy",
+            json={"extra_busy": [[0, 0]]},
+        )
+        assert resp.status_code == 403
+
+    def test_update_extra_busy_requires_login(self, client, workspace, members):
+        resp = client.patch(
+            f"/api/workspace/{workspace.slug}/members/{members[0].id}/extra-busy",
+            json={"extra_busy": [[0, 0]]},
+        )
+        assert resp.status_code == 401
+
+    def test_update_extra_busy_invalid_payload(self, client, workspace):
+        user = _login(client, "sub-ana", "ana@x.com", "Ana")
+        member, _ = add_member(workspace.id, "Ana", "CC", [], user_id=user.id)
+        resp = client.patch(
+            f"/api/workspace/{workspace.slug}/members/{member.id}/extra-busy",
+            json={"extra_busy": "x"},
+        )
+        assert resp.status_code == 400
+
+    def test_update_extra_busy_nonexistent_member(self, client, workspace):
+        _login(client, "sub-ana", "ana@x.com", "Ana")
+        resp = client.patch(
+            f"/api/workspace/{workspace.slug}/members/9999/extra-busy",
+            json={"extra_busy": []},
+        )
+        assert resp.status_code == 404
+
+    def test_add_member_via_api_binds_user(self, client, workspace):
+        _login(client, "sub-ana", "ana@x.com", "Ana")
+        resp = client.post(
+            f"/api/workspace/{workspace.slug}/members",
+            json={"nome": "Ana", "curso": "CC", "busy": [[0, 0]], "force": True},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["user_id"] is not None

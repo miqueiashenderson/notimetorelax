@@ -1,9 +1,9 @@
 import pytest
 from sqlalchemy import text
 from database import (
-    init_db, create_workspace, get_workspace, get_members,
+    init_db, create_workspace, get_workspace, get_members, get_member,
     add_member, remove_member, hash_password, check_password,
-    slugify, Workspace, Member,
+    slugify, get_or_create_user, get_user, update_extra_busy, Workspace, Member,
 )
 
 
@@ -15,6 +15,7 @@ def test_init_db(engine):
         )]
     assert "workspaces" in tables
     assert "members" in tables
+    assert "users" in tables
 
 
 def test_create_workspace(session):
@@ -120,3 +121,77 @@ def test_slugify():
     assert slugify("  Hello   World  ") == "hello-world"
     assert slugify("A-B-C") == "a-b-c"
     assert slugify("special!!!chars???") == "specialchars"
+
+
+class TestUser:
+    def test_get_or_create_user(self, session):
+        u = get_or_create_user("sub1", "ana@x.com", "Ana", "")
+        assert u.id is not None
+        assert u.google_sub == "sub1"
+        assert u.google_email == "ana@x.com"
+
+    def test_get_or_create_user_updates_info(self, session):
+        u = get_or_create_user("sub1", "ana@x.com", "Ana", "")
+        u2 = get_or_create_user("sub1", "ana@x.com", "Ana Atualizada", "pic-url")
+        assert u2.id == u.id
+        assert u2.google_name == "Ana Atualizada"
+        assert u2.google_picture == "pic-url"
+
+    def test_get_or_create_user_two_users(self, session):
+        u1 = get_or_create_user("sub1", "a@x.com")
+        u2 = get_or_create_user("sub2", "b@x.com")
+        assert u1.id != u2.id
+
+    def test_get_user(self, session):
+        u = get_or_create_user("sub1", "a@x.com")
+        assert get_user(u.id).id == u.id
+        assert get_user(9999) is None
+
+
+class TestExtraBusy:
+    def test_add_member_with_user_id(self, session, workspace):
+        u = get_or_create_user("sub1", "ana@x.com", "Ana")
+        m, erro = add_member(workspace.id, "Ana", "CC", [], user_id=u.id)
+        assert erro is None
+        assert m.user_id == u.id
+
+    def test_update_extra_busy(self, session, workspace):
+        m, _ = add_member(workspace.id, "Ana", "CC", [[0, 0]])
+        assert m.get_extra_busy() == []
+        updated = update_extra_busy(m.id, [[2, 3], [4, 5]])
+        assert updated.id == m.id
+        assert updated.get_extra_busy() == [[2, 3], [4, 5]]
+
+    def test_update_extra_busy_nonexistent(self, session):
+        assert update_extra_busy(9999, []) is None
+
+    def test_get_member(self, session, members):
+        assert get_member(members[0].id).id == members[0].id
+        assert get_member(9999) is None
+
+    def test_extra_busy_separado_do_schedule(self, session, workspace):
+        m, _ = add_member(workspace.id, "Ana", "CC", [[0, 0]])
+        update_extra_busy(m.id, [[5, 5]])
+        m2, erro = add_member(workspace.id, "Ana", "CC", [[0, 0], [1, 1]], force=True)
+        assert erro is None
+        assert m2.get_busy() == [[0, 0], [1, 1]]
+        assert m2.get_extra_busy() == [[5, 5]]
+
+    def test_reupload_sobrescreve_por_user_id(self, session, workspace):
+        u = get_or_create_user("sub1", "ana@x.com", "Ana")
+        m, _ = add_member(workspace.id, "Ana", "CC", [[0, 0], [1, 1]], user_id=u.id)
+        m2, erro = add_member(workspace.id, "Ana Souza", "CC", [[2, 2]], force=True, user_id=u.id)
+        assert erro is None
+        assert m2.id == m.id
+        assert m2.get_busy() == [[2, 2]]
+        assert len(get_members(workspace.id)) == 1
+
+    def test_reupload_nao_rouba_ownership(self, session, workspace):
+        u1 = get_or_create_user("sub1", "a@x.com")
+        u2 = get_or_create_user("sub2", "b@x.com")
+        m, _ = add_member(workspace.id, "Ana", "CC", [[0, 0]], user_id=u1.id)
+        m2, erro = add_member(workspace.id, "Ana", "CC", [[1, 1]], force=True, user_id=u2.id)
+        assert erro is None
+        assert m2.id == m.id
+        assert m2.user_id == u1.id
+        assert m2.get_busy() == [[1, 1]]

@@ -135,3 +135,64 @@ class TestExtrairDePdfBytes:
 
     def test_returns_none_for_empty(self):
         assert extrair_de_pdf_bytes(b"") is None
+
+
+class TestFormatosSigaaUfcg:
+    def test_domingo_a_sabado(self):
+        texto = """
+Nome: ARTHUR DE PAIVA OLIVEIRA
+Curso: ENGENHARIA MECÂNICA
+
+Tabela de Horários:
+Horários Dom Seg Ter Qua Qui Sex Sab
+08:00 -
+09:00 --- 1105458 --- 1105457 --- 1105199 ---
+14:00 -
+15:00 --- 1105420 --- --- 1105464 1105186 ---
+"""
+        res = extrair_completo(texto)
+        assert res is not None
+        assert res["nome"] == "Arthur de Paiva Oliveira"
+        assert res["curso"] == "Eng. Mecânica"
+        dias_ocupados = {r[0] for r in res["horarios_raw"]}
+        assert "Seg" in dias_ocupados
+        assert "Qua" in dias_ocupados
+        assert "Qui" in dias_ocupados
+        assert "Sex" in dias_ocupados
+        assert "Dom" not in dias_ocupados
+
+    def test_segunda_a_sabado(self):
+        texto = """
+Discente: MIQUEIAS HENDERSON DA SILVA SANTOS
+Curso: CIÊNCIA DA COMPUTAÇÃO
+
+Horários Seg Ter Qua Qui Sex Sáb
+08:00 - 09:00 --- 1109049 1411179 --- 1411172 ---
+14:00 - 15:00 1109126 --- --- --- --- ---
+"""
+        res = extrair_completo(texto)
+        assert res is not None
+        assert res["nome"] == "Miqueias Henderson da Silva Santos"
+        assert res["curso"] == "Ciência da Computação"
+        horarios = res["horarios_raw"]
+        # Ter deve ter 1109049, Qua deve ter 1411179, Sex deve ter 1411172, Seg deve ter 1109126
+        dias_e_codigos = {(h[0], h[2]) for h in horarios}
+        assert ("Ter", "1109049") in dias_e_codigos
+        assert ("Qua", "1411179") in dias_e_codigos
+        assert ("Sex", "1411172") in dias_e_codigos
+        assert ("Seg", "1109126") in dias_e_codigos
+
+    def test_fallback_codigo_turma_sigaa(self):
+        texto = """
+Nome: Aluno Teste
+Curso: Engenharia Elétrica
+Turmas Matriculadas:
+1105420 DISCIPLINA A 01 MATRICULADO 2T23 4T45
+"""
+        res = extrair_completo(texto)
+        assert res is not None
+        assert res["total"] == 4
+        dias = {r[0] for r in res["horarios_raw"]}
+        assert "Seg" in dias
+        assert "Qua" in dias
+

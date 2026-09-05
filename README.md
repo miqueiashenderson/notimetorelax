@@ -36,6 +36,24 @@ notimetorelax/
 └── render.yaml          # Config deploy Render
 ```
 
+## Login Google
+
+Quando as variáveis abaixo estão configuradas, o site exige login com conta
+Google antes de criar/acessar qualquer workspace. Os horários de aula vêm do
+PDF do SIGAA e são vinculados à conta do usuário; cada pessoa pode então marcar
+horários extras de ocupação (projeto, pesquisa, trabalho) no dashboard.
+
+| Variável | Descrição |
+|----------|-----------|
+| `GOOGLE_CLIENT_ID` | Client ID do projeto OAuth no Google Cloud |
+| `GOOGLE_CLIENT_SECRET` | Client Secret do projeto OAuth |
+| `GOOGLE_REDIRECT_URI` | OPCIONAL. Usado se estiver atrás de proxy; default: `https://SEU_DOMINIO/auth/google/callback` |
+
+Redirect URI configurado no Google Cloud: `https://SEU_DOMINIO/auth/google/callback`.
+
+Se `GOOGLE_CLIENT_ID` não estiver definida, o site funciona no modo antigo
+(acesso apenas com a senha do workspace).
+
 ## API
 
 | Método | Rota | Descrição |
@@ -44,6 +62,7 @@ notimetorelax/
 | GET | `/api/workspace/{slug}/members` | Listar membros |
 | POST | `/api/workspace/{slug}/upload?preview=true` | Extrair dados do PDF (sem salvar) |
 | POST | `/api/workspace/{slug}/members` | Salvar membro (JSON: nome, curso, busy) |
+| PATCH | `/api/workspace/{slug}/members/{id}/extra-busy` | Atualizar horários extras do membro |
 | DELETE | `/api/workspace/{slug}/members/{id}` | Remover membro |
 
 ## Desenvolvimento

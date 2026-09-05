@@ -5,20 +5,19 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{{ workspace.name }} — NoTimeToRelax</title>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
 
   :root{
-    --bg:        #161616;
-    --surface:   #1f1f1f;
-    --surface-2: #262626;
-    --line:      #3a3a3a;
-    --fg:        #f2f4f8;
-    --dim:       #8d8d8d;
+    --bg:        #141416;
+    --surface:   #1c1c1f;
+    --surface-2: #252529;
+    --line:      #34343a;
+    --fg:        #f3f4f8;
+    --dim:       #9696a0;
     --cyan:      #3ddbd9;
     --magenta:   #ee5396;
     --green:     #42be65;
     --yellow:    #d2a106;
-    --purple:    #be95ff;
     --mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
     --sans: 'Inter', -apple-system, 'Segoe UI', sans-serif;
   }
@@ -29,10 +28,11 @@
     background:var(--bg);
     color:var(--fg);
     font-family:var(--sans);
-    padding:28px 20px 60px;
+    padding:24px 16px 60px;
+    -webkit-font-smoothing:antialiased;
   }
 
-  .wrap{max-width:1080px;margin:0 auto;}
+  .wrap{max-width:1160px;margin:0 auto;}
 
   header{margin-bottom:18px;}
   .eyebrow{
@@ -51,35 +51,27 @@
     margin:0 0 6px;
     letter-spacing:-.01em;
   }
-  .sub{color:var(--dim);font-size:13.5px;margin:0;max-width:620px;line-height:1.5;}
+  .sub{color:var(--dim);font-size:13.5px;margin:0;max-width:680px;line-height:1.5;}
 
   .disclaimer{
-    margin-top:16px;
+    margin-top:14px;
     background:var(--surface);
     border:1px solid var(--line);
     border-left:3px solid var(--yellow);
     border-radius:6px;
-    padding:12px 14px;
-    font-size:12.5px;
+    padding:10px 14px;
+    font-size:12px;
     color:var(--dim);
-    line-height:1.6;
+    line-height:1.5;
   }
   .disclaimer b{color:var(--fg);}
-  .disclaimer code{
-    font-family:var(--mono);
-    background:var(--surface-2);
-    padding:1px 5px;
-    border-radius:3px;
-    color:var(--yellow);
-    font-size:11.5px;
-  }
 
   .panel{
-    margin-top:22px;
+    margin-top:16px;
     background:var(--surface);
     border:1px solid var(--line);
     border-radius:10px;
-    padding:16px 18px;
+    padding:14px 18px;
   }
   .panel h2{
     font-family:var(--mono);
@@ -87,7 +79,7 @@
     letter-spacing:.1em;
     text-transform:uppercase;
     color:var(--dim);
-    margin:0 0 12px;
+    margin:0 0 10px;
   }
 
   .panel-actions{
@@ -100,7 +92,7 @@
   .btn{
     font-family:var(--mono);
     font-size:11px;
-    letter-spacing:.05em;
+    letter-spacing:.04em;
     color:var(--cyan);
     background:transparent;
     border:1px solid var(--line);
@@ -108,19 +100,24 @@
     border-radius:6px;
     cursor:pointer;
     text-decoration:none;
-    display:inline-block;
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+    transition:all .15s;
+    user-select:none;
   }
-  .btn:hover{border-color:var(--cyan);}
-  .btn-primary{border-color:var(--cyan);}
-  .btn-danger{color:var(--magenta);}
-  .btn-danger:hover{border-color:var(--magenta);}
+  .btn:hover{border-color:var(--cyan);background:rgba(61, 219, 217, 0.08);}
+  .btn-primary{border-color:var(--cyan);background:rgba(61, 219, 217, 0.12);color:var(--cyan);font-weight:600;}
+  .btn-primary:hover{background:var(--cyan);color:var(--bg);}
+  .btn-view.active{background:var(--cyan);color:var(--bg);border-color:var(--cyan);font-weight:700;}
+  .btn-filter.active{background:var(--yellow);color:var(--bg);border-color:var(--yellow);font-weight:700;}
 
   .members{display:flex;flex-wrap:wrap;gap:8px;}
   .chip{
     display:flex;align-items:center;gap:7px;
     font-family:var(--mono);
     font-size:12px;
-    padding:6px 10px;
+    padding:6px 12px;
     border-radius:20px;
     border:1px solid var(--line);
     background:var(--surface-2);
@@ -128,86 +125,336 @@
     user-select:none;
     transition:border-color .15s, opacity .15s;
   }
-  .chip.off{opacity:.35;}
+  .chip.off{opacity:.35;border-style:dashed;}
   .chip .dot{width:8px;height:8px;border-radius:50%;flex:none;}
   .chip:hover{border-color:var(--cyan);}
 
   .toolbar{display:flex;gap:8px;margin-top:12px;}
 
-  .grid-wrap{margin-top:20px;overflow-x:auto;}
-  table{border-collapse:collapse;width:100%;font-family:var(--mono);font-size:12px;}
+  /* Controles de Modo da Grade */
+  .controls-bar{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    flex-wrap:wrap;
+    gap:12px;
+  }
+  .view-group{
+    display:flex;
+    align-items:center;
+    gap:6px;
+    flex-wrap:wrap;
+  }
+  .group-label{
+    font-family:var(--mono);
+    font-size:10.5px;
+    color:var(--dim);
+    text-transform:uppercase;
+    margin-right:2px;
+  }
+
+  /* Banner de Ação de Horário Selecionado */
+  .slot-banner{
+    display:none;
+    margin-top:14px;
+    background:linear-gradient(135deg, rgba(61, 219, 217, 0.08) 0%, rgba(28, 28, 31, 0.95) 100%);
+    border:1px solid var(--cyan);
+    border-radius:10px;
+    padding:14px 18px;
+    animation:fadeIn .2s ease;
+  }
+  @keyframes fadeIn { from{opacity:0;transform:translateY(-4px);} to{opacity:1;transform:translateY(0);} }
+  .slot-banner.show{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:14px;}
+  .slot-banner-title{
+    font-family:var(--mono);
+    font-size:14px;
+    font-weight:700;
+    color:var(--cyan);
+    margin-bottom:4px;
+  }
+  .slot-banner-desc{
+    font-size:12.5px;
+    color:var(--fg);
+    display:flex;
+    gap:14px;
+    flex-wrap:wrap;
+  }
+
+  /* Grade de Horários */
+  .grid-wrap{
+    margin-top:18px;
+    overflow-x:auto;
+    background:var(--surface);
+    border:1px solid var(--line);
+    border-radius:10px;
+    box-shadow:0 4px 20px rgba(0,0,0,0.35);
+  }
+  table{border-collapse:collapse;width:100%;font-family:var(--mono);font-size:11.5px;}
   th, td{border:1px solid var(--line);text-align:center;vertical-align:top;padding:0;}
   th{
     background:var(--surface-2);
-    color:var(--dim);
-    font-weight:500;
-    padding:9px 4px;
-    letter-spacing:.03em;
+    color:var(--fg);
+    font-weight:600;
+    padding:10px 4px;
+    letter-spacing:.04em;
+    font-size:12px;
   }
+  th.weekend{color:var(--yellow);}
   .time-col{
     background:var(--surface-2);
     color:var(--dim);
     white-space:nowrap;
-    padding:4px 10px;
+    padding:6px 12px;
     font-size:11px;
-    text-align:right;
+    text-align:center;
     vertical-align:middle;
+    font-weight:500;
   }
+
   .cell{
-    width:110px;
-    min-height:36px;
+    width:135px;
+    min-height:56px;
     cursor:pointer;
     position:relative;
-    padding:4px 5px;
-    line-height:1.3;
-    font-size:10.5px;
-    text-align:left;
+    padding:6px 5px;
+    vertical-align:middle;
+    transition:outline .1s, filter .15s, opacity .15s;
+    user-select:none;
   }
-  .cell:hover{outline:2px solid var(--cyan);outline-offset:-2px;z-index:2;}
-  .cell .name-row{display:flex;align-items:center;gap:4px;white-space:nowrap;}
-  .cell .ndot{width:5px;height:5px;border-radius:50%;flex:none;display:inline-block;}
-  .cell .nname{overflow:hidden;text-overflow:ellipsis;}
-  .cell .summary{font-size:10px;opacity:.6;text-align:center;padding:6px 0;width:100%;}
-  .cell.selected{outline:2px solid var(--fg);outline-offset:-2px;}
+  .cell:hover{
+    outline:2px solid var(--cyan);
+    outline-offset:-2px;
+    z-index:3;
+    filter:brightness(1.18);
+  }
+  .cell.selected{
+    outline:2.5px solid var(--fg);
+    outline-offset:-2px;
+    z-index:4;
+  }
+  .cell.dimmed{
+    opacity:0.18;
+    filter:grayscale(0.85);
+  }
 
-  .legend{display:flex;align-items:center;gap:14px;margin-top:14px;font-family:var(--mono);font-size:11px;color:var(--dim);flex-wrap:wrap;}
+  /* Conteúdo visual da célula */
+  .cell-status{
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    gap:3px;
+    height:100%;
+    min-height:44px;
+  }
+  .badge-full-free{
+    display:inline-flex;
+    align-items:center;
+    gap:4px;
+    background:rgba(66, 190, 101, 0.28);
+    border:1px solid rgba(66, 190, 101, 0.6);
+    color:#5ce485;
+    font-weight:700;
+    font-size:10px;
+    padding:3px 6px;
+    border-radius:4px;
+  }
+  .badge-full-busy{
+    display:inline-flex;
+    align-items:center;
+    gap:4px;
+    background:rgba(238, 83, 150, 0.2);
+    border:1px solid rgba(238, 83, 150, 0.4);
+    color:#ff8389;
+    font-size:10px;
+    padding:3px 6px;
+    border-radius:4px;
+  }
+  .badge-mixed{
+    display:flex;
+    justify-content:space-between;
+    width:100%;
+    gap:4px;
+    font-size:9.5px;
+    font-weight:600;
+    padding:2px 4px;
+    background:rgba(0,0,0,0.35);
+    border-radius:4px;
+  }
+  .badge-free-text{color:#5ce485;}
+  .badge-busy-text{color:#ff8389;}
+
+  .avatar-row{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:3px;
+    margin-top:3px;
+    flex-wrap:wrap;
+  }
+  .avatar-dot{
+    width:7px;
+    height:7px;
+    border-radius:50%;
+    flex:none;
+  }
+  .avatar-dot.busy{
+    opacity:0.4;
+    position:relative;
+  }
+  .avatar-dot.extra{
+    opacity:1;
+    box-shadow:0 0 0 2px rgba(210,161,6,.9);
+  }
+  .extra-marker{
+    position:absolute;
+    top:4px;
+    right:4px;
+    width:8px;
+    height:8px;
+    border-radius:3px;
+    background:var(--yellow);
+    border:1px solid rgba(0,0,0,.6);
+  }
+  .cell.editing{border-color:var(--yellow);}
+  .cell.editing:hover{outline-color:var(--yellow);}
+  .cell.locked{cursor:not-allowed;}
+
+  .editbar .controls-bar{
+    display:flex;
+    justify-content:space-between;
+    align-items:flex-start;
+    gap:12px;
+    flex-wrap:wrap;
+  }
+  .editbar p{
+    font-family:var(--sans);
+    font-size:12.5px;
+    color:var(--dim);
+    line-height:1.5;
+    margin:4px 0 0;
+  }
+
+  .name-list-cell{
+    display:flex;
+    flex-direction:column;
+    gap:2px;
+    max-height:60px;
+    overflow:hidden;
+    text-align:left;
+    width:100%;
+  }
+  .name-tag{
+    display:flex;
+    align-items:center;
+    gap:4px;
+    font-size:9px;
+    padding:1px 4px;
+    border-radius:3px;
+    background:rgba(0,0,0,0.45);
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+  }
+
+  /* Tooltip Flutuante Instantâneo */
+  .grid-tooltip{
+    position:fixed;
+    z-index:9999;
+    pointer-events:none;
+    background:#1a1a1e;
+    border:1px solid var(--cyan);
+    box-shadow:0 12px 36px rgba(0,0,0,0.75);
+    border-radius:8px;
+    padding:12px 14px;
+    font-family:var(--sans);
+    font-size:12px;
+    min-width:250px;
+    max-width:320px;
+    display:none;
+    animation:tooltipFade .1s ease;
+  }
+  @keyframes tooltipFade { from{opacity:0;transform:scale(0.97);} to{opacity:1;transform:scale(1);} }
+  .tt-head{
+    font-family:var(--mono);
+    font-weight:700;
+    font-size:12.5px;
+    color:var(--cyan);
+    margin-bottom:2px;
+  }
+  .tt-stats{
+    font-size:11.5px;
+    color:var(--dim);
+    margin-bottom:8px;
+  }
+  .tt-bar{
+    height:4px;
+    width:100%;
+    background:rgba(238, 83, 150, 0.4);
+    border-radius:2px;
+    overflow:hidden;
+    margin-bottom:10px;
+  }
+  .tt-bar-fill{
+    height:100%;
+    background:var(--green);
+    border-radius:2px;
+  }
+  .tt-section{margin-top:6px;}
+  .tt-title{
+    font-family:var(--mono);
+    font-size:10px;
+    font-weight:700;
+    text-transform:uppercase;
+    letter-spacing:.05em;
+    margin-bottom:4px;
+  }
+  .tt-title.free{color:var(--green);}
+  .tt-title.busy{color:var(--magenta);}
+  .tt-tags{display:flex;flex-wrap:wrap;gap:4px;}
+  .tt-item{
+    display:inline-flex;
+    align-items:center;
+    gap:5px;
+    font-size:11px;
+    padding:2px 7px;
+    border-radius:4px;
+    background:var(--surface-2);
+    border:1px solid var(--line);
+  }
+  .tt-item.free{border-color:rgba(66, 190, 101, 0.5);color:var(--fg);}
+  .tt-item.busy{border-color:rgba(238, 83, 150, 0.4);color:var(--dim);}
+
+  .legend{
+    display:flex;
+    align-items:center;
+    gap:14px;
+    padding:12px 18px;
+    font-family:var(--mono);
+    font-size:11px;
+    color:var(--dim);
+    flex-wrap:wrap;
+    border-top:1px solid var(--line);
+    background:var(--surface);
+  }
   .legend .scale{display:flex;height:10px;width:160px;border-radius:3px;overflow:hidden;}
   .legend .scale div{flex:1;}
 
-  .detail{
-    margin-top:20px;
-    display:none;
-  }
+  .detail{margin-top:20px;display:none;}
   .detail.show{display:block;}
-  .detail-head{
-    font-family:var(--mono);
-    font-size:12px;
-    color:var(--cyan);
-    margin-bottom:10px;
-  }
+  .detail-head{font-family:var(--mono);font-size:13px;color:var(--cyan);margin-bottom:10px;font-weight:700;}
   .cols2{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
-  .list h3{
-    font-family:var(--mono);
-    font-size:10.5px;
-    letter-spacing:.08em;
-    text-transform:uppercase;
-    margin:0 0 8px;
-  }
+  .list h3{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;margin:0 0 8px;}
   .list.free h3{color:var(--green);}
   .list.busy h3{color:var(--magenta);}
   .list ul{list-style:none;margin:0;padding:0;font-size:13px;line-height:2;}
   .list li{display:flex;align-items:center;gap:8px;}
-  .list .dot{width:7px;height:7px;border-radius:50%;flex:none;}
+  .list .dot{width:8px;height:8px;border-radius:50%;flex:none;}
 
-  .empty-state{
-    text-align:center;
-    padding:40px 20px;
-    color:var(--dim);
-  }
+  .empty-state{text-align:center;padding:40px 20px;color:var(--dim);}
   .empty-state p{font-size:14px;line-height:1.6;}
-  .empty-state .btn{margin-top:16px;}
 
-  footer{margin-top:26px;color:var(--dim);font-size:11px;font-family:var(--mono);text-align:center;}
+  footer{margin-top:30px;color:var(--dim);font-size:11px;font-family:var(--mono);text-align:center;}
 </style>
 </head>
 <body>
@@ -216,27 +463,73 @@
   <header>
     <p class="eyebrow"><a href="/">NoTimeToRelax</a> &middot; {{ workspace.name }}</p>
     <h1>Disponibilidade semanal da equipe</h1>
-    <p class="sub" id="subtitle">Grade construída a partir dos horários de aula.</p>
+    <p class="sub" id="subtitle">Grade de horários livres x em aula, gerada a partir dos comprovantes de matrícula SIGAA.</p>
 
     <div class="disclaimer">
-      <b>O que esta grade mostra:</b> apenas os horários em que cada pessoa tem <b>aula obrigatória</b> matriculada, segundo os comprovantes/atestados SIGAA enviados. Uma célula "livre" significa — <b>sem aula</b> — não confirma disponibilidade real para reunião.<br><br>
-      <b>O que não está aqui:</b> estágios, monitorias, provas, compromissos pessoais ou qualquer coisa fora da grade curricular.
+      <b>Como funciona esta grade:</b> células mostram quem tem <b>aula obrigatória</b> ou <b>outro compromisso</b> no horário. Uma célula com status <b>livre</b> significa <b>sem ocupação declarada</b> naquele intervalo.
     </div>
   </header>
 
   {% if members %}
   <section class="panel">
     <div class="panel-actions" style="justify-content:space-between;">
-      <h2 style="margin:0;">Integrantes (clique para incluir/excluir)</h2>
-      <a href="/workspace/{{ workspace.slug }}/upload" class="btn btn-primary">+ Enviar PDF</a>
+      <h2 style="margin:0;">Integrantes ({{ members|length }}) — clique para filtrar</h2>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <button class="btn" id="btnEditExtra" style="display:none;">Editar meus horários</button>
+        <button class="btn" onclick="copiarLink(this)">Copiar link do workspace</button>
+        <a href="/workspace/{{ workspace.slug }}/upload" class="btn btn-primary">+ Enviar PDF</a>
+      </div>
     </div>
-    <div class="members" id="members"></div>
+    <div class="members" id="members" style="margin-top:10px;"></div>
     <div class="toolbar">
       <button class="btn" id="selectAll">Selecionar todos</button>
       <button class="btn" id="selectNone">Limpar seleção</button>
     </div>
   </section>
 
+  <!-- Barra de Edição de Horários Extras -->
+  <section class="panel editbar" id="editBar" style="display:none;">
+    <div class="controls-bar">
+      <div>
+        <h2>Editando horários extras</h2>
+        <p>Clique nas células para marcar ou desmarcar quando você está ocupado por outro motivo (projeto, pesquisa, trabalho). Horários vindos do PDF (aula) não podem ser alterados aqui.</p>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <button class="btn btn-primary" id="btnSaveExtra">Salvar horários</button>
+        <button class="btn" id="btnCancelEdit">Cancelar</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Controles da Grade de Horários -->
+  <section class="panel" style="padding:10px 16px;">
+    <div class="controls-bar">
+      <div class="view-group">
+        <span class="group-label">Visualização:</span>
+        <button class="btn btn-view active" id="btnViewSummary" onclick="setViewMode('summary')">Contagem</button>
+        <button class="btn btn-view" id="btnViewFree" onclick="setViewMode('free')">Quem tá livre</button>
+        <button class="btn btn-view" id="btnViewBusy" onclick="setViewMode('busy')">Quem tá ocupado</button>
+      </div>
+      <div class="view-group">
+        <button class="btn btn-filter" id="btnOnly100" onclick="toggleOnly100()">Só 100% livres</button>
+        <button class="btn btn-filter" id="btnToggleWeekend" onclick="toggleWeekend()">Fim de Semana</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Banner de Ação de Horário Selecionado -->
+  <div id="quickActionBanner" class="slot-banner">
+    <div>
+      <div id="bannerSlotTitle" class="slot-banner-title"></div>
+      <div id="bannerSlotStats" class="slot-banner-desc"></div>
+    </div>
+<div style="display:flex;gap:8px;align-items:center;">
+        <button class="btn btn-primary" onclick="copySlotMeetingInfo(this)">Copiar lista para reunião</button>
+        <button class="btn" onclick="closeBanner()">Fechar</button>
+      </div>
+  </div>
+
+  <!-- Tabela Heatmap -->
   <section class="grid-wrap">
     <table id="grid"></table>
     <div class="legend">
@@ -250,19 +543,23 @@
         <div style="background:#42be65"></div>
       </div>
       <span>Mais livres</span>
+      <span style="display:inline-flex;align-items:center;gap:6px;"><span class="avatar-dot" style="background:#ff6b6b"></span> em aula</span>
+      <span style="display:inline-flex;align-items:center;gap:6px;"><span class="avatar-dot extra" style="background:#ff9f43"></span> outro compromisso</span>
+      <span style="margin-left:auto;font-size:10.5px;color:var(--cyan);">Dica: passe o mouse sobre qualquer horário para ver a lista de quem está livre!</span>
     </div>
   </section>
 
+  <!-- Detalhes Finais / Expansão -->
   <section class="detail" id="detail">
     <div class="panel">
       <div class="detail-head" id="detailHead"></div>
       <div class="cols2">
         <div class="list free">
-          <h3>Livres</h3>
+          <h3>Integrantes Livres</h3>
           <ul id="freeList"></ul>
         </div>
         <div class="list busy">
-          <h3>Em aula</h3>
+          <h3>Integrantes Ocupados</h3>
           <ul id="busyList"></ul>
         </div>
       </div>
@@ -272,12 +569,18 @@
   <section class="panel">
     <div class="panel-actions" style="justify-content:space-between;">
       <h2 style="margin:0;">Integrantes</h2>
-      <a href="/workspace/{{ workspace.slug }}/upload" class="btn btn-primary">+ Enviar PDF</a>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <button class="btn" onclick="copiarLink(this)">Copiar link</button>
+        <a href="/workspace/{{ workspace.slug }}/upload" class="btn btn-primary">+ Enviar PDF</a>
+      </div>
     </div>
     <div class="empty-state">
-      <p>Nenhum membro cadastrado ainda.</p>
-      <p>Compartilhe o link com sua equipe para que cada um envie<br>o comprovante de matrícula (PDF do SIGAA).</p>
-      <a href="/workspace/{{ workspace.slug }}/upload" class="btn btn-primary">Enviar meu PDF</a>
+      <p style="font-size:16px;font-weight:600;color:var(--fg);margin-bottom:6px;">Nenhum membro cadastrado ainda</p>
+      <p>Compartilhe o link do workspace com sua equipe para que cada um envie<br>o comprovante de matrícula (PDF do SIGAA).</p>
+      <div style="display:flex;gap:10px;justify-content:center;margin-top:18px;">
+        <button class="btn" onclick="copiarLink(this)">Copiar link para a equipe</button>
+        <a href="/workspace/{{ workspace.slug }}/upload" class="btn btn-primary">Enviar meu PDF</a>
+      </div>
     </div>
   </section>
   {% endif %}
@@ -287,8 +590,42 @@
   </footer>
 </div>
 
+<!-- Tooltip Flutuante -->
+<div id="gridTooltip" class="grid-tooltip"></div>
+
 <script>
-const DAYS = ["Seg","Ter","Qua","Qui","Sex"];
+function copiarLink(btn){
+  const url = window.location.origin + '/workspace/{{ workspace.slug }}';
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(url).then(()=>{
+      const oldHtml = btn.innerHTML;
+      btn.innerHTML = 'Link copiado!';
+      btn.style.borderColor = 'var(--green)';
+      btn.style.color = 'var(--green)';
+      setTimeout(()=>{
+        btn.innerHTML = oldHtml;
+        btn.style.borderColor = '';
+        btn.style.color = '';
+      }, 2500);
+    }).catch(()=>{
+      prompt('Copie o link do workspace:', url);
+    });
+  } else {
+    prompt('Copie o link do workspace:', url);
+  }
+}
+
+const ALL_DAYS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
+const DAY_NAMES_FULL = {
+  "Seg": "Segunda-feira",
+  "Ter": "Terça-feira",
+  "Qua": "Quarta-feira",
+  "Qui": "Quinta-feira",
+  "Sex": "Sexta-feira",
+  "Sáb": "Sábado",
+  "Dom": "Domingo"
+};
+
 const SLOTS = [
   "07:00-08:00","08:00-09:00","09:00-10:00","10:10-11:10","11:10-12:10",
   "13:00-14:00","14:00-15:00","15:00-16:00","16:10-17:10","17:10-18:10",
@@ -296,11 +633,38 @@ const SLOTS = [
 ];
 
 let MEMBERS = {{ members|tojson }};
-
+let USER = {{ user|tojson }};
 const active = new Set(MEMBERS.map(m=>m.name));
 
+// Detectar se há ocupações no Sábado (d=5) ou Domingo (d=6)
+let showWeekend = MEMBERS.some(m => (m.busy || []).concat(m.extra_busy || []).some(b => b[0] === 5 || b[0] === 6));
+let currentViewMode = 'summary'; // 'summary', 'free', 'busy'
+let only100Mode = false;
+let selectedSlotData = null;
+
+// Estado de edição de horários extras
+let myMember = null;
+let editing = false;
+let draftExtra = new Set();
+
+function getDays(){
+  return showWeekend ? ALL_DAYS : ["Seg", "Ter", "Qua", "Qui", "Sex"];
+}
+
+function isClassBusy(m, d, s){
+  return (m.busy || []).some(b => b[0]===d && b[1]===s);
+}
+
+function isExtraBusy(m, d, s){
+  return (m.extra_busy || []).some(b => b[0]===d && b[1]===s);
+}
+
 function isBusy(m, d, s){
-  return m.busy.some(b => b[0]===d && b[1]===s);
+  return isClassBusy(m, d, s) || isExtraBusy(m, d, s);
+}
+
+function busyReason(m, d, s){
+  return isClassBusy(m, d, s) ? 'aula' : 'outro compromisso';
 }
 
 function renderMembers(){
@@ -310,11 +674,14 @@ function renderMembers(){
   MEMBERS.forEach(m=>{
     const chip = document.createElement('div');
     chip.className = 'chip' + (active.has(m.name)?'':' off');
-    chip.innerHTML = `<span class="dot" style="background:${m.color}"></span>${m.name}`;
+    const isMine = USER && m.user_id === USER.id;
+    chip.innerHTML = `<span class="dot" style="background:${m.color}"></span>${m.name}${isMine ? ' (você)' : ''}`;
+    chip.title = active.has(m.name) ? 'Clique para desativar este membro da grade' : 'Clique para ativar este membro na grade';
     chip.onclick = ()=>{
       active.has(m.name) ? active.delete(m.name) : active.add(m.name);
       renderMembers();
       renderGrid();
+      if(selectedSlotData) refreshSlotBanner();
     };
     box.appendChild(chip);
   });
@@ -336,58 +703,244 @@ function colorForRatio(r){
   return `rgb(66,190,101)`;
 }
 
-let selectedCell = null;
+function setViewMode(mode){
+  currentViewMode = mode;
+  document.querySelectorAll('.btn-view').forEach(b => b.classList.remove('active'));
+  if(mode==='summary') document.getElementById('btnViewSummary')?.classList.add('active');
+  if(mode==='free') document.getElementById('btnViewFree')?.classList.add('active');
+  if(mode==='busy') document.getElementById('btnViewBusy')?.classList.add('active');
+  renderGrid();
+}
+
+function toggleOnly100(){
+  only100Mode = !only100Mode;
+  document.getElementById('btnOnly100')?.classList.toggle('active', only100Mode);
+  renderGrid();
+}
+
+function toggleWeekend(){
+  showWeekend = !showWeekend;
+  document.getElementById('btnToggleWeekend')?.classList.toggle('active', showWeekend);
+  renderGrid();
+}
+
+const tooltip = document.getElementById('gridTooltip');
+
+function showTooltip(e, dayLabel, timeLabel, free, busy, total, d, s){
+  if(!tooltip) return;
+  const ratio = total > 0 ? Math.round((free.length / total) * 100) : 0;
+  
+  let freeTags = free.length ? free.map(m=>`<span class="tt-item free"><span class="avatar-dot" style="background:${m.color}"></span>${m.name}</span>`).join('') : '<span style="color:var(--dim);font-size:11px;">Nenhum</span>';
+  let busyTags = busy.length ? busy.map(m=>`<span class="tt-item busy"><span class="avatar-dot busy ${isExtraBusy(m,d,s) ? 'extra' : ''}" style="background:${m.color}"></span>${m.name} <span style="color:var(--dim);font-size:10px;">(${busyReason(m,d,s)})</span></span>`).join('') : '<span style="color:var(--dim);font-size:11px;">Ninguém ocupado</span>';
+
+  tooltip.innerHTML = `
+    <div class="tt-head">${DAY_NAMES_FULL[dayLabel] || dayLabel} · ${timeLabel}</div>
+    <div class="tt-stats">Disponibilidade: <b>${free.length} de ${total} livres (${ratio}%)</b></div>
+    <div class="tt-bar"><div class="tt-bar-fill" style="width:${ratio}%"></div></div>
+    <div class="tt-section">
+      <div class="tt-title free">Livres (${free.length})</div>
+      <div class="tt-tags">${freeTags}</div>
+    </div>
+    <div class="tt-section">
+      <div class="tt-title busy">Ocupados (${busy.length})</div>
+      <div class="tt-tags">${busyTags}</div>
+    </div>
+  `;
+
+  tooltip.style.display = 'block';
+  positionTooltip(e);
+}
+
+function positionTooltip(e){
+  if(!tooltip || tooltip.style.display === 'none') return;
+  const x = e.clientX + 16;
+  const y = e.clientY + 16;
+  const rect = tooltip.getBoundingClientRect();
+  const maxX = window.innerWidth - rect.width - 20;
+  const maxY = window.innerHeight - rect.height - 20;
+  tooltip.style.left = Math.min(x, maxX) + 'px';
+  tooltip.style.top = Math.min(y, maxY) + 'px';
+}
+
+function hideTooltip(){
+  if(tooltip) tooltip.style.display = 'none';
+}
 
 function renderGrid(){
   const table = document.getElementById('grid');
   if(!table) return;
   table.innerHTML = '';
 
+  const days = getDays();
   const thead = document.createElement('tr');
-  thead.innerHTML = '<th class="time-col">Horário</th>' + DAYS.map(d=>`<th>${d}</th>`).join('');
+  thead.innerHTML = '<th class="time-col">Horário</th>' + days.map(d=>{
+    const isWk = d==='Sáb' || d==='Dom';
+    return `<th class="${isWk ? 'weekend' : ''}">${d}</th>`;
+  }).join('');
   table.appendChild(thead);
 
   const pool = MEMBERS.filter(m=>active.has(m.name));
   const total = pool.length || 1;
 
-  SLOTS.forEach((label, s)=>{
+  SLOTS.forEach((slotLabel, s)=>{
     const row = document.createElement('tr');
     const timeTd = document.createElement('td');
     timeTd.className = 'time-col';
-    timeTd.textContent = label;
+    timeTd.textContent = slotLabel;
     row.appendChild(timeTd);
 
-    DAYS.forEach((_, d)=>{
+    days.forEach(dayLabel=>{
+      const d = ALL_DAYS.indexOf(dayLabel);
       const free = pool.filter(m=>!isBusy(m,d,s));
+      const busy = pool.filter(m=>isBusy(m,d,s));
       const freeCount = free.length;
-      const ratio = freeCount/total;
+      const busyCount = busy.length;
+      const ratio = pool.length ? (freeCount / pool.length) : 0;
+
       const td = document.createElement('td');
       td.className = 'cell';
-      td.style.background = pool.length ? colorForRatio(ratio) : '#222';
+      td.style.background = pool.length ? colorForRatio(ratio) : '#202024';
 
-      if (!pool.length) {
-        td.innerHTML = `<div class="summary">—</div>`;
-      } else if (freeCount === 0) {
-        td.innerHTML = `<div class="summary">todos ocupados</div>`;
-      } else if (freeCount === total) {
-        td.innerHTML = `<div class="summary">todos livres</div>`;
-      } else {
-        let html = '';
-        free.forEach(m => {
-          html += `<div class="name-row"><span class="ndot" style="background:${m.color}"></span><span class="nname">${m.name}</span></div>`;
-        });
-        td.innerHTML = html;
+      if (only100Mode && (freeCount < pool.length || pool.length === 0)) {
+        td.classList.add('dimmed');
       }
 
+      // Renderizar conteúdo de acordo com o modo
+      if (!pool.length) {
+        td.innerHTML = `<div class="cell-status"><span style="color:var(--dim)">—</span></div>`;
+      } else if (currentViewMode === 'summary') {
+        let contentHtml = '';
+        if (freeCount === pool.length) {
+          contentHtml = `
+            <div class="cell-status">
+              <span class="badge-full-free">100% LIVRE</span>
+              <div class="avatar-row">${free.map(m=>`<span class="avatar-dot" style="background:${m.color}" title="${m.name} (livre)"></span>`).join('')}</div>
+            </div>`;
+        } else if (freeCount === 0) {
+          contentHtml = `
+            <div class="cell-status">
+              <span class="badge-full-busy">0 LIVRES</span>
+              <div class="avatar-row">${busy.map(m=>`<span class="avatar-dot busy ${isExtraBusy(m,d,s) ? 'extra' : ''}" style="background:${m.color}" title="${m.name} (${busyReason(m,d,s)})"></span>`).join('')}</div>
+            </div>`;
+        } else {
+          contentHtml = `
+            <div class="cell-status">
+              <div class="badge-mixed">
+                <span class="badge-free-text">${freeCount}</span>
+                <span class="badge-busy-text">${busyCount}</span>
+              </div>
+              <div class="avatar-row">
+                ${free.map(m=>`<span class="avatar-dot" style="background:${m.color}" title="${m.name} (livre)"></span>`).join('')}
+              </div>
+            </div>`;
+        }
+        td.innerHTML = contentHtml;
+      } else if (currentViewMode === 'free') {
+        if (freeCount === 0) {
+          td.innerHTML = `<div class="cell-status"><span class="badge-full-busy">Ninguém livre</span></div>`;
+        } else {
+          let html = `<div class="name-list-cell">`;
+          free.slice(0, 3).forEach(m => {
+            html += `<span class="name-tag" style="border-left:2px solid ${m.color}"><span class="avatar-dot" style="background:${m.color}"></span>${m.name.split(' ')[0]}</span>`;
+          });
+          if (free.length > 3) html += `<span style="font-size:8.5px;color:var(--dim);text-align:center;">+${free.length-3} outros</span>`;
+          html += `</div>`;
+          td.innerHTML = html;
+        }
+      } else if (currentViewMode === 'busy') {
+        if (busyCount === 0) {
+          td.innerHTML = `<div class="cell-status"><span class="badge-full-free">Ninguém ocupado</span></div>`;
+        } else {
+          let html = `<div class="name-list-cell">`;
+          busy.slice(0, 3).forEach(m => {
+            const extra = isExtraBusy(m, d, s);
+            html += `<span class="name-tag" style="border-left:2px solid ${extra ? '#ff9f43' : '#ff6b6b'}"><span class="avatar-dot busy ${extra ? 'extra' : ''}" style="background:${m.color}"></span>${m.name.split(' ')[0]} <span style="color:var(--dim);font-size:8px;">(${busyReason(m,d,s)})</span></span>`;
+          });
+          if (busy.length > 3) html += `<span style="font-size:8.5px;color:var(--dim);text-align:center;">+${busy.length-3} outros</span>`;
+          html += `</div>`;
+          td.innerHTML = html;
+        }
+      }
+
+      // Marcações do modo de edição de horários extras
+      if (editing) {
+        td.classList.add('editing');
+        const key = d + ',' + s;
+        if (myMember && isClassBusy(myMember, d, s)) td.classList.add('locked');
+        if (draftExtra.has(key)) td.innerHTML += '<div class="extra-marker"></div>';
+      }
+
+      // Hover Tooltip
+      td.onmouseenter = (e)=>showTooltip(e, dayLabel, slotLabel, free, busy, pool.length, d, s);
+      td.onmousemove = (e)=>positionTooltip(e);
+      td.onmouseleave = ()=>hideTooltip();
+
+      // Clique para ação rápida / edição de horários extras
       td.onclick = ()=>{
+        if (editing && myMember) {
+          if (isClassBusy(myMember, d, s)) return;
+          const key = d + ',' + s;
+          draftExtra.has(key) ? draftExtra.delete(key) : draftExtra.add(key);
+          renderGrid();
+          return;
+        }
         document.querySelectorAll('.cell.selected').forEach(c=>c.classList.remove('selected'));
         td.classList.add('selected');
-        showDetail(d,s,label);
+        selectedSlotData = { dayLabel, slotLabel, d, s, free, busy, total: pool.length };
+        refreshSlotBanner();
+        showDetail(d, s, slotLabel);
       };
+
       row.appendChild(td);
     });
     table.appendChild(row);
   });
+}
+
+function refreshSlotBanner(){
+  const banner = document.getElementById('quickActionBanner');
+  if(!banner || !selectedSlotData) return;
+  const { dayLabel, slotLabel, d, s } = selectedSlotData;
+  const pool = MEMBERS.filter(m=>active.has(m.name));
+  const free = pool.filter(m=>!isBusy(m,d,s));
+  const busy = pool.filter(m=>isBusy(m,d,s));
+  
+  selectedSlotData.free = free;
+  selectedSlotData.busy = busy;
+  selectedSlotData.total = pool.length;
+
+  document.getElementById('bannerSlotTitle').textContent = `${DAY_NAMES_FULL[dayLabel] || dayLabel} às ${slotLabel}`;
+  document.getElementById('bannerSlotStats').innerHTML = `
+    <span><b>${free.length} livres:</b> ${free.map(m=>m.name).join(', ') || 'Ninguém'}</span>
+    <span><b>${busy.length} ocupados:</b> ${busy.map(m=>`${m.name} (${busyReason(m, d, s)})`).join(', ') || 'Ninguém'}</span>
+  `;
+  banner.classList.add('show');
+}
+
+function closeBanner(){
+  const banner = document.getElementById('quickActionBanner');
+  if(banner) banner.classList.remove('show');
+  document.querySelectorAll('.cell.selected').forEach(c=>c.classList.remove('selected'));
+  selectedSlotData = null;
+}
+
+function copySlotMeetingInfo(btn){
+  if(!selectedSlotData) return;
+  const { dayLabel, slotLabel, d, s, free, busy } = selectedSlotData;
+  const text = `Reunião da Equipe — ${DAY_NAMES_FULL[dayLabel] || dayLabel} (${slotLabel})
+Disponíveis (${free.length}): ${free.map(m=>m.name).join(', ') || 'Ninguém'}
+Ocupados (${busy.length}): ${busy.map(m=>`${m.name} (${busyReason(m, d, s)})`).join(', ') || 'Ninguém'}
+Link da grade: ${window.location.origin}/workspace/{{ workspace.slug }}`;
+
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(text).then(()=>{
+      const oldHtml = btn.innerHTML;
+      btn.innerHTML = 'Detalhes copiados!';
+      setTimeout(()=>btn.innerHTML = oldHtml, 2500);
+    }).catch(()=>prompt('Copie a mensagem:', text));
+  } else {
+    prompt('Copie a mensagem:', text);
+  }
 }
 
 function showDetail(d,s,label){
@@ -395,28 +948,104 @@ function showDetail(d,s,label){
   const free = pool.filter(m=>!isBusy(m,d,s));
   const busy = pool.filter(m=>isBusy(m,d,s));
 
-  document.getElementById('detailHead').textContent = `${DAYS[d]} · ${label}`;
+  document.getElementById('detailHead').textContent = `${DAY_NAMES_FULL[ALL_DAYS[d]] || ALL_DAYS[d]} · ${label}`;
   document.getElementById('freeList').innerHTML = free.map(m=>
-    `<li><span class="dot" style="background:${m.color}"></span>${m.name}</li>`).join('') || '<li style="color:var(--dim)">ninguém selecionado</li>';
+    `<li><span class="dot" style="background:${m.color}"></span>${m.name}</li>`).join('') || '<li style="color:var(--dim)">ninguém livre</li>';
   document.getElementById('busyList').innerHTML = busy.map(m=>
-    `<li><span class="dot" style="background:${m.color}"></span>${m.name}</li>`).join('') || '<li style="color:var(--dim)">ninguém</li>';
+    `<li><span class="dot" style="background:${m.color}"></span>${m.name} <span style="color:var(--dim);font-size:11px;">(${busyReason(m,d,s)})</span></li>`).join('') || '<li style="color:var(--dim)">ninguém ocupado</li>';
   document.getElementById('detail').classList.add('show');
+}
+
+// ─── Edição de Horários Extras ──────────────────────────────────────────────
+
+function showEditBar(){
+  const bar = document.getElementById('editBar');
+  if(bar) bar.style.display = 'block';
+}
+
+function hideEditBar(){
+  const bar = document.getElementById('editBar');
+  if(bar) bar.style.display = 'none';
+}
+
+function startEdit(){
+  if(!myMember) return;
+  editing = true;
+  draftExtra = new Set((myMember.extra_busy || []).map(b => b[0] + ',' + b[1]));
+  showEditBar();
+  renderGrid();
+}
+
+function endEdit(){
+  editing = false;
+  draftExtra = new Set();
+  hideEditBar();
+  renderGrid();
+}
+
+function saveExtraBusy(){
+  if(!myMember) return;
+  const arr = [...draftExtra].map(key => key.split(',').map(Number));
+  const btnEl = document.getElementById('btnSaveExtra');
+  if(btnEl) btnEl.disabled = true;
+  fetch(`/api/workspace/{{ workspace.slug }}/members/${myMember.id}/extra-busy`, {
+    method:'PATCH',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ extra_busy: arr })
+  })
+  .then(r => r.json())
+  .then(data => {
+    if(data.erro){
+      alert(data.erro);
+      if(btnEl) btnEl.disabled = false;
+      return;
+    }
+    const idx = MEMBERS.findIndex(m => m.id === myMember.id);
+    if(idx >= 0){
+      MEMBERS[idx].extra_busy = data.extra_busy || [];
+      myMember = MEMBERS[idx];
+    }
+    endEdit();
+    renderMembers();
+  })
+  .catch(() => {
+    alert('Erro ao salvar. Tente novamente.');
+    if(btnEl) btnEl.disabled = false;
+  });
 }
 
 document.getElementById('selectAll')?.addEventListener('click', ()=>{
   MEMBERS.forEach(m=>active.add(m.name));
-  renderMembers(); renderGrid();
-});
-document.getElementById('selectNone')?.addEventListener('click', ()=>{
-  active.clear();
-  renderMembers(); renderGrid();
+  renderMembers();
+  renderGrid();
+  if(selectedSlotData) refreshSlotBanner();
 });
 
-// Update subtitle with count
-const sub = document.getElementById('subtitle');
-if(sub && MEMBERS.length > 0){
-  sub.textContent = `Grade construída a partir dos horários de aula de ${MEMBERS.length} integrante${MEMBERS.length !== 1 ? 's' : ''}.`;
+document.getElementById('selectNone')?.addEventListener('click', ()=>{
+  active.clear();
+  renderMembers();
+  renderGrid();
+  if(selectedSlotData) refreshSlotBanner();
+});
+
+// Inicialização
+if(document.getElementById('btnToggleWeekend')){
+  document.getElementById('btnToggleWeekend').classList.toggle('active', showWeekend);
 }
+
+if(USER && MEMBERS.length){
+  myMember = MEMBERS.find(m => m.user_id === USER.id) || null;
+}
+const btnEditExtra = document.getElementById('btnEditExtra');
+const btnSaveExtra = document.getElementById('btnSaveExtra');
+const btnCancelEdit = document.getElementById('btnCancelEdit');
+if(btnEditExtra){
+  btnEditExtra.style.display = myMember ? 'inline-flex' : 'none';
+  btnEditExtra.title = myMember ? 'Marque horários em que você está ocupado por outro motivo' : '';
+  btnEditExtra.addEventListener('click', startEdit);
+}
+if(btnSaveExtra) btnSaveExtra.addEventListener('click', saveExtraBusy);
+if(btnCancelEdit) btnCancelEdit.addEventListener('click', endEdit);
 
 renderMembers();
 renderGrid();

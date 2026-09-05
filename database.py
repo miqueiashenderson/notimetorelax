@@ -1,9 +1,16 @@
 import json, os, re, hashlib, secrets, unicodedata, socket
 from urllib.parse import urlparse, urlunparse
-from sqlalchemy import create_engine
+from dotenv import load_dotenv
+from sqlalchemy import create_engine, ForeignKey
 from sqlalchemy.pool import NullPool
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, Session
-from datetime import datetime
+from datetime import datetime, timezone
+
+load_dotenv()
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DATA_DIR = os.path.join(BASE_DIR, "data")
+DEFAULT_SQLITE_PATH = os.path.join(DATA_DIR, "horariolivre.db")
 
 
 def get_engine():
@@ -12,21 +19,20 @@ def get_engine():
         return engine
 
     url = os.environ.get("DATABASE_URL")
-    if url:
+    if url and "[YOUR-PASSWORD]" not in url and "[SUA-SENHA]" not in url:
         if url.startswith("postgres://"):
             url = url.replace("postgres://", "postgresql://", 1)
-        parsed = urlparse(url)
-        if parsed.hostname and 'supabase' in parsed.hostname:
-            try:
-                ipv4 = socket.gethostbyname(parsed.hostname)
-                if ipv4 != parsed.hostname:
-                    netloc = parsed.netloc.replace(parsed.hostname, ipv4)
-                    url = urlunparse(parsed._replace(netloc=netloc))
-            except Exception:
+        try:
+            test_engine = create_engine(url, pool_pre_ping=True, poolclass=NullPool)
+            with test_engine.connect():
                 pass
-        engine = create_engine(url, pool_pre_ping=True, poolclass=NullPool)
-    else:
-        engine = create_engine("sqlite:////tmp/horariolivre.db")
+            engine = test_engine
+            return engine
+        except Exception as e:
+            print(f"[AVISO] Falha ao conectar ao banco remoto: {e}. Usando SQLite local.")
+
+    os.makedirs(DATA_DIR, exist_ok=True)
+    engine = create_engine(f"sqlite:///{DEFAULT_SQLITE_PATH}")
     return engine
 
 
@@ -45,7 +51,7 @@ class Workspace(Base):
     name: Mapped[str] = mapped_column(nullable=False)
     password_hash: Mapped[str] = mapped_column(nullable=True)
     created_at: Mapped[str] = mapped_column(
-        default=lambda: datetime.utcnow().isoformat()
+        default=lambda: datetime.now(timezone.utc).isoformat()
     )
 
     def to_dict(self):
@@ -58,24 +64,59 @@ class Workspace(Base):
         }
 
 
+class User(Base):
+    __tablename__ = "users"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    google_sub: Mapped[str] = mapped_column(unique=True, nullable=False)
+    google_email: Mapped[str] = mapped_column(nullable=False)
+    google_name: Mapped[str] = mapped_column(default="")
+    google_picture: Mapped[str] = mapped_column(default="")
+    created_at: Mapped[str] = mapped_column(
+        default=lambda: datetime.now(timezone.utc).isoformat()
+    )
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "google_sub": self.google_sub,
+            "google_email": self.google_email,
+            "google_name": self.google_name,
+            "google_picture": self.google_picture,
+            "created_at": self.created_at,
+        }
+
+
 class Member(Base):
     __tablename__ = "members"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    workspace_id: Mapped[int] = mapped_column(nullable=False)
+    workspace_id: Mapped[int] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="CASCADE"), index=True, nullable=False
+    )
     name: Mapped[str] = mapped_column(nullable=False)
     course: Mapped[str] = mapped_column(default="")
     schedule: Mapped[str] = mapped_column(default="[]")
+    extra_busy: Mapped[str] = mapped_column(default="[]")
     color: Mapped[str] = mapped_column(default="#3ddbd9")
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
     created_at: Mapped[str] = mapped_column(
-        default=lambda: datetime.utcnow().isoformat()
+        default=lambda: datetime.now(timezone.utc).isoformat()
     )
     updated_at: Mapped[str] = mapped_column(
-        default=lambda: datetime.utcnow().isoformat()
+        default=lambda: datetime.now(timezone.utc).isoformat()
     )
 
     def get_busy(self):
         return json.loads(self.schedule)
+
+    def get_extra_busy(self):
+        return json.loads(self.extra_busy)
+
+    def get_all_busy(self):
+        return self.get_busy() + self.get_extra_busy()
 
     def to_dict(self):
         return {
@@ -85,7 +126,9 @@ class Member(Base):
             "course": self.course,
             "color": self.color,
             "busy": self.get_busy(),
-            "total": len(self.get_busy()),
+            "extra_busy": self.get_extra_busy(),
+            "total": len(self.get_all_busy()),
+            "user_id": self.user_id,
             "created_at": self.created_at,
             "updated_at": self.updated_at,
         }
@@ -122,7 +165,23 @@ def slugify(name: str) -> str:
 
 
 def init_db():
-    Base.metadata.create_all(get_engine())
+    engine = get_engine()
+    Base.metadata.create_all(engine)
+    _migrate(engine)
+
+
+def _migrate(engine):
+    from sqlalchemy import inspect, text
+
+    insp = inspect(engine)
+    if "members" not in set(insp.get_table_names()):
+        return
+    member_cols = {c["name"] for c in insp.get_columns("members")}
+    with engine.begin() as conn:
+        if "extra_busy" not in member_cols:
+            conn.execute(text("ALTER TABLE members ADD COLUMN extra_busy TEXT DEFAULT '[]'"))
+        if "user_id" not in member_cols:
+            conn.execute(text("ALTER TABLE members ADD COLUMN user_id INTEGER"))
 
 
 def create_workspace(name: str, password: str | None = None):
@@ -153,21 +212,91 @@ def get_members(workspace_id: int):
         )
 
 
+def get_member(member_id: int):
+    with Session(get_engine()) as sess:
+        return sess.query(Member).filter_by(id=member_id).first()
+
+
+def get_or_create_user(google_sub: str, google_email: str, google_name: str = "", google_picture: str = ""):
+    with Session(get_engine()) as sess:
+        u = sess.query(User).filter_by(google_sub=google_sub).first()
+        if not u:
+            u = User(
+                google_sub=google_sub,
+                google_email=google_email,
+                google_name=google_name,
+                google_picture=google_picture,
+            )
+            sess.add(u)
+            sess.commit()
+            sess.refresh(u)
+            return u
+        changed = False
+        if u.google_email != google_email:
+            u.google_email = google_email
+            changed = True
+        if google_name and u.google_name != google_name:
+            u.google_name = google_name
+            changed = True
+        if google_picture and u.google_picture != google_picture:
+            u.google_picture = google_picture
+            changed = True
+        if changed:
+            sess.commit()
+            sess.refresh(u)
+        return u
+
+
+def get_user(user_id: int):
+    with Session(get_engine()) as sess:
+        return sess.query(User).filter_by(id=user_id).first()
+
+
+def update_extra_busy(member_id: int, extra_busy: list):
+    with Session(get_engine()) as sess:
+        m = sess.query(Member).filter_by(id=member_id).first()
+        if not m:
+            return None
+        m.extra_busy = json.dumps(extra_busy)
+        m.updated_at = datetime.now(timezone.utc).isoformat()
+        sess.commit()
+        sess.refresh(m)
+        return m
+
+
 def add_member(
-    workspace_id: int, name: str, course: str, busy: list, force: bool = False
+    workspace_id: int, name: str, course: str, busy: list, force: bool = False, user_id: int | None = None
 ):
     with Session(get_engine()) as sess:
-        existing = (
-            sess.query(Member)
-            .filter_by(workspace_id=workspace_id, name=name)
-            .first()
-        )
+        existing = None
+        if user_id is not None and force:
+            existing = (
+                sess.query(Member)
+                .filter_by(workspace_id=workspace_id, user_id=user_id)
+                .first()
+            )
+            if existing:
+                existing.name = name
+                existing.course = course
+                existing.schedule = json.dumps(busy)
+                existing.updated_at = datetime.now(timezone.utc).isoformat()
+                sess.commit()
+                sess.refresh(existing)
+                return existing, None
+        if existing is None:
+            existing = (
+                sess.query(Member)
+                .filter_by(workspace_id=workspace_id, name=name)
+                .first()
+            )
         if existing and not force:
             return None, "Já existe um membro com este nome."
         if existing:
             existing.schedule = json.dumps(busy)
             existing.course = course
-            existing.updated_at = datetime.utcnow().isoformat()
+            if user_id is not None and existing.user_id is None:
+                existing.user_id = user_id
+            existing.updated_at = datetime.now(timezone.utc).isoformat()
             sess.commit()
             sess.refresh(existing)
             return existing, None
@@ -181,6 +310,7 @@ def add_member(
             course=course,
             schedule=json.dumps(busy),
             color=color,
+            user_id=user_id,
         )
         sess.add(member)
         sess.commit()

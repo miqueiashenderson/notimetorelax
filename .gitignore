@@ -5,4 +5,5 @@ data/
 uploads/
 *.db
 data/
+.env
 dlad
