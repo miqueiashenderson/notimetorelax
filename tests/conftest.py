@@ -1,6 +1,9 @@
 import os, sys, json
 
 os.environ["DATABASE_URL"] = "sqlite:////tmp/test_horariolivre.db"
+os.environ["GOOGLE_CLIENT_ID"] = ""
+os.environ["GOOGLE_CLIENT_SECRET"] = ""
+os.environ["GOOGLE_REDIRECT_URI"] = ""
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 

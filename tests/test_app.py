@@ -169,6 +169,14 @@ class TestMembersAPI:
         assert resp.status_code == 409
         assert resp.json()["nome_existente"] is True
 
+    def test_add_member_normalizes_typed_name(self, client, workspace):
+        resp = client.post(
+            f"/api/workspace/{workspace.slug}/members",
+            json={"nome": "  carlos silva ", "curso": "Física", "busy": [[0, 0]]},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["name"] == "Carlos Silva"
+
 
 class TestUploadAPI:
     def test_upload_non_pdf(self, client, workspace):

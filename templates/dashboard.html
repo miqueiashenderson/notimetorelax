@@ -491,8 +491,8 @@
   <section class="panel editbar" id="editBar" style="display:none;">
     <div class="controls-bar">
       <div>
-        <h2>Editando horários extras</h2>
-        <p>Clique nas células para marcar ou desmarcar quando você está ocupado por outro motivo (projeto, pesquisa, trabalho). Horários vindos do PDF (aula) não podem ser alterados aqui.</p>
+        <h2><span style="color:var(--cyan);">Editar meus horários</span> — editando você mesmo</h2>
+        <p><b id="editBarWho" style="color:var(--cyan);"></b> — é <b>seu</b> horário, não o de outra pessoa. Clique nas células para marcar ou desmarcar quando você fica ocupado por outro motivo (projeto, pesquisa, trabalho). Os horários de aula vindos do seu PDF não podem ser alterados aqui.</p>
       </div>
       <div style="display:flex;gap:8px;align-items:center;">
         <button class="btn btn-primary" id="btnSaveExtra">Salvar horários</button>
@@ -971,7 +971,11 @@ function hideEditBar(){
 function startEdit(){
   if(!myMember) return;
   editing = true;
+  const who = document.getElementById('editBarWho');
+  if(who) who.textContent = myMember.name + ' (você)';
   draftExtra = new Set((myMember.extra_busy || []).map(b => b[0] + ',' + b[1]));
+  const btnSave = document.getElementById('btnSaveExtra');
+  if(btnSave) btnSave.disabled = false;
   showEditBar();
   renderGrid();
 }
@@ -979,6 +983,8 @@ function startEdit(){
 function endEdit(){
   editing = false;
   draftExtra = new Set();
+  const btnSave = document.getElementById('btnSaveExtra');
+  if(btnSave) btnSave.disabled = false;
   hideEditBar();
   renderGrid();
 }

@@ -1,4 +1,4 @@
-import os, time, hashlib, hmac, secrets, urllib.parse
+import os, time, hashlib, hmac, secrets, urllib.parse, unicodedata
 import httpx
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request, UploadFile, File, Form, Query
@@ -12,7 +12,7 @@ from database import (
     add_member, remove_member, check_password, get_or_create_user, get_user,
     update_extra_busy,
 )
-from extractor import extrair_de_pdf_bytes
+from extractor import extrair_de_pdf_bytes, title_case
 
 SESSION_TTL = 86400 * 30
 SESSION_SECRET = os.environ.get("SESSION_SECRET") or secrets.token_hex(32)
@@ -286,8 +286,12 @@ async def upload_page(request: Request, slug: str):
         return RedirectResponse(url=f"/auth/google/login?next={urllib.parse.quote(f'/workspace/{slug}/upload')}", status_code=302)
     if not _require_auth(request, ws):
         return RedirectResponse(url=f"/workspace/{slug}/login", status_code=302)
+    user = _get_current_user(request)
     return templates.TemplateResponse(
-        request=request, name="upload.html", context={"workspace": ws.to_dict()}
+        request=request, name="upload.html", context={
+            "workspace": ws.to_dict(),
+            "user_name": user.google_name if user else "",
+        }
     )
 
 
@@ -425,8 +429,9 @@ async def api_add_member(slug: str, request: Request):
     force = body.get("force", False)
     if not nome:
         return JSONResponse({"erro": "Nome é obrigatório."}, status_code=400)
+    nome_norm = title_case(unicodedata.normalize("NFC", nome.lower()))
     user = _get_current_user(request)
-    member, erro = add_member(ws.id, nome, curso, busy, force=force, user_id=(user.id if user else None))
+    member, erro = add_member(ws.id, nome_norm, curso, busy, force=force, user_id=(user.id if user else None))
     if erro:
         return JSONResponse({"erro": erro, "nome_existente": True}, status_code=409)
     return JSONResponse(member.to_dict())

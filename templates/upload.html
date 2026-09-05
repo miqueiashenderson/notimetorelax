@@ -64,6 +64,45 @@
   .dropzone .hint{font-size:11px;color:var(--dim);margin-top:8px;opacity:.6;}
   .dropzone input[type="file"]{display:none;}
 
+  .field{
+    margin-top:20px;
+  }
+  .field label{
+    display:block;
+    font-size:11px;
+    color:var(--dim);
+    margin-bottom:6px;
+    font-family:var(--mono);
+    letter-spacing:.05em;
+  }
+  .field input{
+    width:100%;
+    background:var(--surface);
+    border:1px solid var(--line);
+    border-radius:6px;
+    padding:12px 14px;
+    color:var(--fg);
+    font-size:14px;
+    font-family:var(--sans);
+  }
+  .field input:focus{
+    outline:none;
+    border-color:var(--cyan);
+  }
+
+  .aviso{
+    margin-top:16px;
+    background:var(--surface);
+    border:1px solid #8a5a00;
+    border-left:3px solid #f2c14e;
+    border-radius:6px;
+    padding:12px 14px;
+    font-size:13px;
+    color:#f2c14e;
+    line-height:1.5;
+  }
+  .aviso b{color:var(--fg);}
+
   .preview{
     margin-top:20px;
     display:none;
@@ -145,8 +184,13 @@
   <header>
     <p class="back"><a href="/workspace/{{ workspace.slug }}">&larr; Voltar ao dashboard</a></p>
     <h1>Enviar comprovante</h1>
-    <p class="sub">Faça upload do seu PDF de matrícula (comprovante SIGAA) para preencher seus horários na grade da equipe.</p>
+    <p class="sub">Escreva seu nome e faça upload do seu PDF de matrícula (comprovante SIGAA) para preencher os <b>seus</b> horários na grade da equipe.</p>
   </header>
+
+  <div class="field">
+    <label for="txtNome">Seu nome completo</label>
+    <input type="text" id="txtNome" placeholder="Ex.: Maria Silva" autocomplete="name" value="{{ user_name or '' }}">
+  </div>
 
   <div class="dropzone" id="dropzone">
     <div class="icon">&#128196;</div>
@@ -160,11 +204,13 @@
   <div class="preview" id="preview">
     <div class="card">
       <table>
-        <tr><td>Nome</td><td id="pvNome"></td></tr>
+        <tr><td>Membro</td><td id="pvNome"></td></tr>
+        <tr id="pvPdfNomeRow" style="display:none;"><td>Nome no PDF</td><td id="pvPdfNome"></td></tr>
         <tr><td>Curso</td><td id="pvCurso"></td></tr>
         <tr><td>Horários ocupados</td><td id="pvTotal"></td></tr>
       </table>
     </div>
+    <div class="aviso" id="aviso" style="display:none;"></div>
     <div class="actions">
       <button class="btn btn-primary" id="btnConfirmar">Confirmar e salvar</button>
       <button class="btn btn-secondary" onclick="resetUpload()">Cancelar</button>
@@ -188,8 +234,16 @@ const erro = document.getElementById('erro');
 const preview = document.getElementById('preview');
 const sucesso = document.getElementById('sucesso');
 const btnConfirmar = document.getElementById('btnConfirmar');
+const txtNome = document.getElementById('txtNome');
+const aviso = document.getElementById('aviso');
 
 let extractedData = null;
+
+function normName(s){
+  return (s || '').trim().toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]/g, '');
+}
 
 dropzone.addEventListener('click', () => fileInput.click());
 dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('dragover'); });
@@ -205,6 +259,7 @@ fileInput.addEventListener('change', () => {
 
 function resetUpload(){
   erro.style.display = 'none';
+  aviso.style.display = 'none';
   preview.classList.remove('show');
   sucesso.style.display = 'none';
   dropzone.style.display = 'block';
@@ -218,8 +273,14 @@ async function handleFile(file){
     showErro('Apenas arquivos PDF são aceitos.');
     return;
   }
+  if(!txtNome.value.trim()){
+    showErro('Digite seu nome antes de enviar o PDF.');
+    txtNome.focus();
+    return;
+  }
 
   erro.style.display = 'none';
+  aviso.style.display = 'none';
   preview.classList.remove('show');
   sucesso.style.display = 'none';
   dropzone.style.display = 'block';
@@ -246,9 +307,26 @@ async function handleFile(file){
     }
 
     extractedData = data;
-    document.getElementById('pvNome').textContent = data.nome;
+    const nomeDigitado = txtNome.value.trim();
+    const pdfName = data.nome || '';
+
+    document.getElementById('pvNome').textContent = nomeDigitado;
     document.getElementById('pvCurso').textContent = data.curso;
     document.getElementById('pvTotal').textContent = data.total + ' horários';
+
+    const match = normName(nomeDigitado) === normName(pdfName);
+    const pvPdfNomeRow = document.getElementById('pvPdfNomeRow');
+    if(pdfName && !match){
+      document.getElementById('pvPdfNome').textContent = pdfName;
+      pvPdfNomeRow.style.display = '';
+      aviso.innerHTML = 'Atenção: o PDF identifica <b>' + pdfName + '</b>, que é diferente do nome que você digitou. <b>Se este for o seu PDF</b>, pode continuar do mesmo jeito.';
+      aviso.style.display = 'block';
+      btnConfirmar.textContent = 'Confirmar e salvar do mesmo jeito';
+    }else{
+      document.getElementById('pvPdfNome').textContent = '';
+      pvPdfNomeRow.style.display = 'none';
+      btnConfirmar.textContent = 'Confirmar e salvar';
+    }
 
     dropzone.style.display = 'none';
     preview.classList.add('show');
@@ -263,6 +341,13 @@ async function handleFile(file){
 
 btnConfirmar.addEventListener('click', async () => {
   if(!extractedData) return;
+  if(!txtNome.value.trim()){
+    showErro('Digite seu nome antes de salvar.');
+    txtNome.focus();
+    btnConfirmar.disabled = false;
+    btnConfirmar.textContent = 'Confirmar e salvar';
+    return;
+  }
   btnConfirmar.disabled = true;
   btnConfirmar.innerHTML = '<span class="spinner"></span> Salvando...';
 
@@ -271,7 +356,7 @@ btnConfirmar.addEventListener('click', async () => {
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({
-        nome: extractedData.nome,
+        nome: txtNome.value.trim(),
         curso: extractedData.curso,
         busy: extractedData.busy,
         force: true
@@ -287,6 +372,7 @@ btnConfirmar.addEventListener('click', async () => {
     }
 
     preview.classList.remove('show');
+    aviso.style.display = 'none';
     sucesso.style.display = 'block';
 
   }catch(err){
