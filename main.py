@@ -130,6 +130,19 @@ async def ensure_db(request: Request, call_next):
     try:
         _ensure_db()
         return await call_next(request)
+    except RuntimeError as e:
+        msg = str(e)
+        if request.url.path.startswith("/api"):
+            return JSONResponse({"erro": msg}, status_code=500)
+        html = (
+            "<!doctype html><html lang='pt-BR'><meta charset='utf-8'>"
+            "<title>NoTimeToRelax</title>"
+            "<body style='font-family:sans-serif;max-width:640px;margin:60px auto;padding:0 20px'>"
+            f"<h2>Banco de dados indisponível</h2>"
+            f"<p>{msg}</p>"
+            "</body></html>"
+        )
+        return HTMLResponse(html, status_code=500)
     except Exception as e:
         return JSONResponse(
             {"erro": f"Erro interno: {type(e).__name__}: {e}"},

@@ -36,11 +36,17 @@ def get_engine():
             engine = test_engine
             return engine
         except Exception as e:
-            print(f"[AVISO] Falha ao conectar ao banco remoto: {e}. Usando SQLite local.")
+            print(f"[AVISO] Falha ao conectar ao banco remoto: {e}. Tentando SQLite local.")
 
-    os.makedirs(DATA_DIR, exist_ok=True)
-    engine = create_engine(f"sqlite:///{DEFAULT_SQLITE_PATH}")
-    return engine
+    try:
+        os.makedirs(DATA_DIR, exist_ok=True)
+        engine = create_engine(f"sqlite:///{DEFAULT_SQLITE_PATH}")
+        return engine
+    except Exception as e:
+        raise RuntimeError(
+            "Banco de dados indisponível: configure DATABASE_URL "
+            "(Supabase) nas variáveis de ambiente do servidor."
+        ) from e
 
 
 engine = None
