@@ -1,8 +1,8 @@
 import json, os, re, hashlib, secrets, unicodedata, socket
 from urllib.parse import urlparse, urlunparse
 from dotenv import load_dotenv
-from sqlalchemy import create_engine, ForeignKey
-from sqlalchemy.pool import NullPool
+from sqlalchemy import create_engine, ForeignKey, text
+from sqlalchemy.pool import NullPool, QueuePool
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, Session
 from datetime import datetime, timezone
 
@@ -23,7 +23,14 @@ def get_engine():
         if url.startswith("postgres://"):
             url = url.replace("postgres://", "postgresql://", 1)
         try:
-            test_engine = create_engine(url, pool_pre_ping=True, poolclass=NullPool)
+            test_engine = create_engine(
+                url,
+                pool_pre_ping=True,
+                poolclass=QueuePool,
+                pool_size=5,
+                max_overflow=5,
+                pool_recycle=1800,
+            )
             with test_engine.connect():
                 pass
             engine = test_engine
@@ -262,6 +269,45 @@ def update_extra_busy(member_id: int, extra_busy: list):
         sess.commit()
         sess.refresh(m)
         return m
+
+
+def update_own_extra_busy(member_id: int, extra_busy: list, workspace_id: int, owner_user_id: int):
+    """Atualiza o extra_busy de um membro do próprio usuário em UMA ida ao banco.
+    Retorna dict do membro atualizado, None se não existir neste workspace,
+    ou False se o membro não pertence ao usuário."""
+    payload = json.dumps(extra_busy)
+    now = datetime.now(timezone.utc).isoformat()
+    stmt = text(
+        "UPDATE members SET extra_busy = :eb, updated_at = :now "
+        "WHERE id = :mid AND workspace_id = :wid AND user_id = :uid "
+        "RETURNING id, workspace_id, name, course, color, schedule, "
+        "extra_busy, user_id, created_at, updated_at"
+    )
+    with get_engine().connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
+        row = conn.execute(
+            stmt,
+            {"eb": payload, "now": now, "mid": member_id, "wid": workspace_id, "uid": owner_user_id},
+        ).first()
+    if row is None:
+        m = get_member(member_id)
+        if m is None or m.workspace_id != workspace_id:
+            return None
+        return False
+    busy = json.loads(row.schedule)
+    extra = json.loads(row.extra_busy)
+    return {
+        "id": row.id,
+        "workspace_id": row.workspace_id,
+        "name": row.name,
+        "course": row.course,
+        "color": row.color,
+        "busy": busy,
+        "extra_busy": extra,
+        "total": len(busy) + len(extra),
+        "user_id": row.user_id,
+        "created_at": row.created_at,
+        "updated_at": row.updated_at,
+    }
 
 
 def add_member(

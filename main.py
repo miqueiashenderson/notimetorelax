@@ -10,7 +10,7 @@ load_dotenv()
 from database import (
     init_db, create_workspace, get_workspace, get_members, get_member,
     add_member, remove_member, check_password, get_or_create_user, get_user,
-    update_extra_busy,
+    update_extra_busy, update_own_extra_busy,
 )
 from extractor import extrair_de_pdf_bytes, title_case, SLOTS
 
@@ -87,7 +87,25 @@ def _get_current_user(request: Request):
 def _require_google(request: Request) -> bool:
     if not GOOGLE_CLIENT_ID:
         return True
-    return _get_current_user(request) is not None
+    return _current_user_id(request) is not None
+
+
+def _current_user_id(request: Request):
+    """Valida o cookie de sessão sem consultar o banco (identidade assinada por HMAC)."""
+    cookie = request.cookies.get("user_session")
+    if not cookie:
+        return None
+    try:
+        payload, sig = cookie.rsplit(".", 1)
+        expected = hmac.new(SESSION_SECRET.encode(), payload.encode(), hashlib.sha256).hexdigest()[:16]
+        if not hmac.compare_digest(sig, expected):
+            return None
+        user_id, expiry = payload.rsplit(":", 1)
+        if time.time() >= float(expiry):
+            return None
+        return int(user_id)
+    except Exception:
+        return None
 
 
 def _google_redirect_uri(request: Request) -> str:
@@ -498,18 +516,15 @@ async def api_update_extra_busy(slug: str, member_id: int, request: Request):
         if isinstance(item, list) and len(item) == 2
         and isinstance(item[0], int) and isinstance(item[1], int)
     ]
-    user = _get_current_user(request)
-    if not user:
+    user_id = _current_user_id(request)
+    if not user_id:
         return JSONResponse({"erro": "Faça login com Google."}, status_code=401)
-    member = get_member(member_id)
-    if not member:
+    res = update_own_extra_busy(member_id, normalizados, workspace_id=ws.id, owner_user_id=user_id)
+    if res is None:
         return JSONResponse({"erro": "Membro não encontrado."}, status_code=404)
-    if member.workspace_id != ws.id:
-        return JSONResponse({"erro": "Membro não encontrado."}, status_code=404)
-    if member.user_id is None or member.user_id != user.id:
+    if res is False:
         return JSONResponse({"erro": "Você não pode editar os horários deste membro."}, status_code=403)
-    updated = update_extra_busy(member.id, normalizados)
-    return JSONResponse(updated.to_dict())
+    return JSONResponse(res)
 
 
 @app.delete("/api/workspace/{slug}/members/{member_id}")
