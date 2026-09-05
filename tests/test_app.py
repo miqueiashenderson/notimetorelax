@@ -178,6 +178,25 @@ class TestMembersAPI:
         assert resp.json()["name"] == "Carlos Silva"
 
 
+class TestExportCSV:
+    def test_export_csv(self, client, workspace, members):
+        resp = client.get(f"/api/workspace/{workspace.slug}/export.csv")
+        assert resp.status_code == 200
+        assert "text/csv" in resp.headers["content-type"]
+        text = resp.text
+        assert "Horário" in text
+        assert "Seg" in text
+        assert "livres" in text
+
+    def test_export_csv_requires_auth(self, client, workspace_with_password):
+        resp = client.get(f"/api/workspace/{workspace_with_password.slug}/export.csv")
+        assert resp.status_code == 403
+
+    def test_export_csv_nonexistent_workspace(self, client):
+        resp = client.get("/api/workspace/nope/export.csv")
+        assert resp.status_code == 404
+
+
 class TestUploadAPI:
     def test_upload_non_pdf(self, client, workspace):
         resp = client.post(

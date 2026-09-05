@@ -1,8 +1,8 @@
-import os, time, hashlib, hmac, secrets, urllib.parse, unicodedata
+import os, time, hashlib, hmac, secrets, urllib.parse, unicodedata, csv, io
 import httpx
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request, UploadFile, File, Form, Query
-from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse, Response
 from fastapi.templating import Jinja2Templates
 
 load_dotenv()
@@ -12,7 +12,9 @@ from database import (
     add_member, remove_member, check_password, get_or_create_user, get_user,
     update_extra_busy,
 )
-from extractor import extrair_de_pdf_bytes, title_case
+from extractor import extrair_de_pdf_bytes, title_case, SLOTS
+
+ALL_DAYS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]
 
 SESSION_TTL = 86400 * 30
 SESSION_SECRET = os.environ.get("SESSION_SECRET") or secrets.token_hex(32)
@@ -340,6 +342,46 @@ async def api_get_members(request: Request, slug: str):
         return JSONResponse({"erro": "Acesso negado."}, status_code=403)
     members = get_members(ws.id)
     return JSONResponse([m.to_dict() for m in members])
+
+
+@app.get("/api/workspace/{slug}/export.csv")
+async def api_export_csv(request: Request, slug: str):
+    ws = get_workspace(slug)
+    if not ws:
+        return JSONResponse({"erro": "Workspace não encontrado."}, status_code=404)
+    if not _require_google(request):
+        return JSONResponse({"erro": "Faça login com Google."}, status_code=401)
+    if not _require_auth(request, ws):
+        return JSONResponse({"erro": "Acesso negado."}, status_code=403)
+
+    membros = [m.to_dict() for m in get_members(ws.id)]
+    tem_fim_de_semana = any(
+        any(b[0] in (5, 6) for b in (mb["busy"] + mb["extra_busy"]))
+        for mb in membros
+    )
+    dias = ALL_DAYS if tem_fim_de_semana else ALL_DAYS[:5]
+
+    def _livre(mb: dict, d: int, s: int) -> bool:
+        return not any(b[0] == d and b[1] == s for b in (mb["busy"] + mb["extra_busy"]))
+
+    out = io.StringIO()
+    writer = csv.writer(out, delimiter=";", lineterminator="\n")
+    writer.writerow(["Horário"] + dias)
+    for s, slot in enumerate(SLOTS):
+        linha = [slot]
+        for d in range(len(dias)):
+            livres = [mb["name"] for mb in membros if _livre(mb, d, s)]
+            linha.append(f"{len(livres)} livres: " + ", ".join(livres) if livres else "0 livres")
+        writer.writerow(linha)
+
+    conteudo = "\ufeff" + out.getvalue()
+    return Response(
+        content=conteudo,
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": f'attachment; filename="disponibilidade-{slug}.csv"'
+        },
+    )
 
 
 @app.post("/api/workspace/{slug}/upload")
