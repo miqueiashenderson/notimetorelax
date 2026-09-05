@@ -36,6 +36,20 @@ SIGAA_TURNO_MAP = {
 }
 
 
+def _raw_texto(reader: PdfReader) -> str:
+    """Texto cru dos fluxos Tj (visitor). Preserva os espaços reais entre
+    palavras; o modo layout insere espaços extras em campos com letter-spacing."""
+    buf: list[str] = []
+
+    def visit(text, cm, tm, font_dict, font_size):
+        if text:
+            buf.append(text)
+
+    for pag in reader.pages:
+        pag.extract_text(visitor_text=visit)
+    return "".join(buf)
+
+
 def extrair_texto(path: str) -> str:
     try:
         with open(path, "rb") as f:
@@ -57,23 +71,49 @@ def extrair_de_pdf_bytes(content: bytes):
         )
         if not texto.strip():
             return None
-        return extrair_completo(texto)
+        return extrair_completo(texto, texto_raw=_raw_texto(reader))
     except Exception:
         return None
 
 
-def extrair_dados_aluno(texto: str):
+def _label_re(palavra: str) -> str:
+    return r'[ -]*'.join(re.escape(c) + r'\s*' for c in palavra)
+
+
+CURSO_LABEL = _label_re("Curso")
+POS_CURSO = (
+    r'\s*(?:' + "|".join(_label_re(x) for x in (
+        "Matrícula", "Vínculo", "Nível", "Turmas", "Status", "Tipo", "Tabela",
+    )) + r')'
+)
+
+
+def _capturar_campos(fonte: str):
     nome = curso = ""
-    for linha in texto.split('\n'):
+    for linha in fonte.split('\n'):
         if not nome:
-            m = re.search(r'(?:Discente|N\s*o\s*m\s*e)\s*:\s*(.+)', linha)
+            m = re.search(r'(?:Discente|N\s*o\s*m\s*e)\s*:\s*(.+?)(?=' + CURSO_LABEL + r'|\s*$)', linha, re.I)
             if m:
                 nome = m.group(1).strip()
         if not curso:
-            m = re.search(r'C\s*u\s*r\s*s\s*o\s*:\s*(.+)', linha)
+            m = re.search(r'C\s*u\s*r\s*s\s*o\s*:\s*(.+?)(?=' + POS_CURSO + r'|\s*$)', linha, re.I)
             if m:
                 curso = m.group(1).strip()
     return nome, curso
+
+
+def extrair_dados_aluno(texto: str, texto_raw: str | None = None):
+    """Extrai nome e curso. texto_raw (fluxos Tj crus) preserva espaços reais
+    que o modo layout corrompe em campos com letter-spacing (SIGAA)."""
+    fontes = ([texto_raw, texto] if texto_raw else [texto])
+    melhor = ("", "")
+    for fonte in fontes:
+        n, c = _capturar_campos(fonte)
+        if not melhor[0] and n:
+            melhor = (n, c)
+        if n and c:
+            return n, c
+    return melhor
 
 
 def curso_curto(curso: str) -> str:
@@ -196,8 +236,8 @@ def title_case(nome: str) -> str:
     return ' '.join(resultado)
 
 
-def extrair_completo(texto: str):
-    nome, curso = extrair_dados_aluno(texto)
+def extrair_completo(texto: str, texto_raw: str | None = None):
+    nome, curso = extrair_dados_aluno(texto, texto_raw)
     if not nome:
         return None
     nome = unicodedata.normalize('NFC', nome)
@@ -219,7 +259,15 @@ def extrair_completo(texto: str):
 
 
 def extrair_de_pdf(path: str):
-    texto = extrair_texto(path)
-    if not texto.strip():
+    try:
+        with open(path, "rb") as f:
+            reader = PdfReader(f)
+            texto = "\n".join(
+                pag.extract_text(extraction_mode="layout") or ""
+                for pag in reader.pages
+            )
+            if not texto.strip():
+                return None
+            return extrair_completo(texto, texto_raw=_raw_texto(reader))
+    except Exception:
         return None
-    return extrair_completo(texto)

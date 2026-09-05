@@ -61,6 +61,40 @@ class TestExtrairDadosAluno:
         assert curso == ""
 
 
+class TestLetterSpacingSIGAA:
+    def test_raw_limpo_vence_layout_espacado(self):
+        layout = (
+            "N o m e : FLAV IA B EATRIZ B O RG ES M O N TE\n"
+            "C u rso : EN G EN HARIA M EC Â N IC A - D /C C T"
+        )
+        raw = "Nome: FLAVIA BEATRIZ BORGES MONTE\nCurso: ENGENHARIA MECÂNICA"
+        assert extrair_dados_aluno(layout, raw) == (
+            "FLAVIA BEATRIZ BORGES MONTE", "ENGENHARIA MECÂNICA"
+        )
+
+    def test_raw_sem_quebra_de_linha_nao_grupa_o_resto(self):
+        raw = (
+            "Discente:CLARA RAFAELA DE OLIVEIRA E SILVACurso:"
+            "ENGENHARIA QUÍMICAStatus:ATIVO"
+        )
+        assert extrair_dados_aluno("", raw) == (
+            "CLARA RAFAELA DE OLIVEIRA E SILVA", "ENGENHARIA QUÍMICA"
+        )
+
+    def test_layout_fallback_quando_raw_vazio(self):
+        layout = "Discente: MARIA SANTOS\nCurso: ENGENHARIA MECÂNICA"
+        assert extrair_dados_aluno(layout, "") == (
+            "MARIA SANTOS", "ENGENHARIA MECÂNICA"
+        )
+
+    def test_completo_espacado(self):
+        raw = "Nome: FLAVIA BEATRIZ BORGES MONTE\nCurso: ENGENHARIA MECÂNICA"
+        r = extrair_completo(raw)
+        assert r is not None
+        assert r["nome"] == "Flavia Beatriz Borges Monte"
+        assert r["curso"] == "Eng. Mecânica"
+
+
 class TestCursoCurto:
     def test_mecanica(self):
         assert curso_curto("Engenharia Mecânica") == "Eng. Mecânica"
