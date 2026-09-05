@@ -11,7 +11,8 @@ logger = logging.getLogger("notimetorelax")
 
 from database import (
     init_db, create_workspace, get_workspace, get_members, get_member,
-    add_member, remove_member, check_password, get_or_create_user, get_user,
+    add_member, remove_member, delete_workspace, claim_workspace,
+    check_password, get_or_create_user, get_user,
     update_extra_busy, update_own_extra_busy,
 )
 from extractor import extrair_de_pdf_bytes, title_case, SLOTS
@@ -421,7 +422,7 @@ async def api_create_workspace(request: Request, name: str = Form(...), password
     if not name or not name.strip():
         return JSONResponse({"erro": "Nome é obrigatório."}, status_code=400)
     pw = password.strip() if password else ""
-    ws = create_workspace(name.strip(), pw if pw else None)
+    ws = create_workspace(name.strip(), pw if pw else None, owner_id=_current_user_id(request))
     resp = JSONResponse(ws.to_dict())
     if pw:
         token = _make_session_token(ws.slug)
@@ -653,3 +654,46 @@ async def api_remove_member(request: Request, slug: str, member_id: int):
     if not ok:
         return JSONResponse({"erro": "Membro não encontrado."}, status_code=404)
     return JSONResponse({"ok": True})
+
+
+@app.delete("/api/workspace/{slug}")
+async def api_delete_workspace(request: Request, slug: str):
+    ws = get_workspace(slug)
+    if not ws:
+        return JSONResponse({"erro": "Workspace não encontrado."}, status_code=404)
+    if not _require_google(request):
+        return JSONResponse({"erro": "Faça login com Google."}, status_code=401)
+    user_id = _current_user_id(request)
+    if ws.owner_id is None:
+        return JSONResponse(
+            {"erro": "Este workspace não tem criador vinculado."}, status_code=403
+        )
+    if ws.owner_id != user_id:
+        return JSONResponse(
+            {"erro": "Apenas o criador do workspace pode deletá-lo."}, status_code=403
+        )
+    if not _require_auth(request, ws):
+        return JSONResponse({"erro": "Acesso negado."}, status_code=403)
+    delete_workspace(slug)
+    resp = JSONResponse({"ok": True})
+    resp.delete_cookie(f"ws_{slug}")
+    return resp
+
+
+@app.post("/api/workspace/{slug}/claim")
+async def api_claim_workspace(request: Request, slug: str):
+    ws = get_workspace(slug)
+    if not ws:
+        return JSONResponse({"erro": "Workspace não encontrado."}, status_code=404)
+    if not _require_google(request):
+        return JSONResponse({"erro": "Faça login com Google."}, status_code=401)
+    if not _require_auth(request, ws):
+        return JSONResponse({"erro": "Acesso negado."}, status_code=403)
+    ws = claim_workspace(slug, _current_user_id(request))
+    if ws is None:
+        return JSONResponse({"erro": "Workspace não encontrado."}, status_code=404)
+    if ws is False:
+        return JSONResponse(
+            {"erro": "Este workspace já tem um criador."}, status_code=409
+        )
+    return JSONResponse(ws.to_dict())

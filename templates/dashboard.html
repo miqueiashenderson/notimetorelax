@@ -470,6 +470,18 @@
     </div>
   </header>
 
+  {% if not workspace.owner_id %}
+  <section class="panel" id="claimPanel">
+    <div class="panel-actions" style="justify-content:space-between;">
+      <div>
+        <h2 style="color:var(--yellow);">Criador não vinculado</h2>
+        <p style="font-size:12.5px;color:var(--dim);line-height:1.5;margin:4px 0 0;">Este workspace foi criado antes da funcionalidade de criador. Se você é o responsável por ele, vincule sua conta para poder gerenciá-lo.</p>
+      </div>
+      <button class="btn btn-primary" id="btnClaimOwner">Vincular minha conta como criador</button>
+    </div>
+  </section>
+  {% endif %}
+
   {% if members %}
   <section class="panel">
     <div class="panel-actions" style="justify-content:space-between;">
@@ -1058,6 +1070,27 @@ if(btnEditExtra){
 }
 if(btnSaveExtra) btnSaveExtra.addEventListener('click', saveExtraBusy);
 if(btnCancelEdit) btnCancelEdit.addEventListener('click', endEdit);
+
+const btnClaim = document.getElementById('btnClaimOwner');
+if(btnClaim){
+  btnClaim.addEventListener('click', ()=>{
+    btnClaim.disabled = true;
+    fetch(`/api/workspace/{{ workspace.slug }}/claim`, {method:'POST'})
+      .then(r => r.json())
+      .then(data => {
+        if(data.erro){
+          alert(data.erro);
+          btnClaim.disabled = false;
+          return;
+        }
+        document.getElementById('claimPanel')?.remove();
+      })
+      .catch(() => {
+        alert('Erro ao vincular. Tente novamente.');
+        btnClaim.disabled = false;
+      });
+  });
+}
 
 renderMembers();
 renderGrid();

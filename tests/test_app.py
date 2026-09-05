@@ -215,6 +215,105 @@ class TestMembersAPI:
         assert "maria" in resp.json()["name"].lower()
 
 
+class TestDeleteWorkspaceAPI:
+    def test_owner_can_delete_workspace(self, client):
+        from database import Session, get_engine, get_workspace
+        user = _login(client, "sub-ana", "ana@x.com", "Ana")
+        resp = client.post("/api/workspace", data={"name": "Pra Deletar"})
+        assert resp.status_code == 200
+        slug = resp.json()["slug"]
+        assert get_workspace(slug).owner_id == user.id
+        resp = client.delete(f"/api/workspace/{slug}")
+        assert resp.status_code == 200
+        assert resp.json()["ok"] is True
+        assert get_workspace(slug) is None
+
+    def test_owner_delete_removes_members(self, client, workspace, session):
+        from database import get_workspace
+        user = _login(client, "sub-ana", "ana@x.com", "Ana")
+        workspace.owner_id = user.id
+        session.commit()
+        m, _ = add_member(workspace.id, "Alice", "CC", [[0, 0]])
+        resp = client.delete(f"/api/workspace/{workspace.slug}")
+        assert resp.status_code == 200
+        assert get_workspace(workspace.slug) is None
+        assert get_member(m.id) is None
+
+    def test_non_owner_cannot_delete(self, client, workspace, session):
+        from database import get_or_create_user as gcu
+        ana = _login(client, "sub-ana", "ana@x.com", "Ana")
+        _login(client, "sub-bob", "bob@x.com", "Bob")
+        workspace.owner_id = ana.id
+        session.commit()
+        resp = client.delete(f"/api/workspace/{workspace.slug}")
+        assert resp.status_code == 403
+        assert "criador" in resp.json()["erro"]
+
+    def test_workspace_without_owner_cannot_be_deleted(self, client, workspace, session):
+        _login(client, "sub-ana", "ana@x.com", "Ana")
+        resp = client.delete(f"/api/workspace/{workspace.slug}")
+        assert resp.status_code == 403
+
+    def test_delete_nonexistent_workspace(self, client):
+        _login(client, "sub-ana", "ana@x.com", "Ana")
+        resp = client.delete("/api/workspace/nope")
+        assert resp.status_code == 404
+
+    def test_delete_requires_google(self, client, workspace, session, monkeypatch):
+        import main as mm
+        monkeypatch.setattr(mm, "GOOGLE_CLIENT_ID", "fake-id")
+        from database import get_or_create_user as gcu
+        owner = gcu("sub-ana", "ana@x.com", "Ana")
+        workspace.owner_id = owner.id
+        session.commit()
+        resp = client.delete(f"/api/workspace/{workspace.slug}")
+        assert resp.status_code == 401
+
+
+class TestClaimWorkspaceAPI:
+    def test_claim_sets_owner(self, client, workspace, session):
+        from database import get_workspace
+        user = _login(client, "sub-ana", "ana@x.com", "Ana")
+        resp = client.post(f"/api/workspace/{workspace.slug}/claim")
+        assert resp.status_code == 200
+        assert resp.json()["owner_id"] == user.id
+        assert get_workspace(workspace.slug).owner_id == user.id
+
+    def test_claim_already_owned(self, client, workspace, session):
+        ana = _login(client, "sub-ana", "ana@x.com", "Ana")
+        workspace.owner_id = ana.id
+        session.commit()
+        _login(client, "sub-bob", "bob@x.com", "Bob")
+        resp = client.post(f"/api/workspace/{workspace.slug}/claim")
+        assert resp.status_code == 409
+        assert "já tem um criador" in resp.json()["erro"]
+
+    def test_claim_nonexistent_workspace(self, client):
+        _login(client, "sub-ana", "ana@x.com", "Ana")
+        resp = client.post("/api/workspace/nope/claim")
+        assert resp.status_code == 404
+
+    def test_claim_requires_workspace_password(self, client, workspace_with_password):
+        _login(client, "sub-ana", "ana@x.com", "Ana")
+        resp = client.post(f"/api/workspace/{workspace_with_password.slug}/claim")
+        assert resp.status_code == 403
+
+    def test_claim_requires_google(self, client, workspace, monkeypatch):
+        import main as mm
+        monkeypatch.setattr(mm, "GOOGLE_CLIENT_ID", "fake-id")
+        resp = client.post(f"/api/workspace/{workspace.slug}/claim")
+        assert resp.status_code == 401
+
+    def test_owner_can_delete_after_claim(self, client, workspace, session):
+        from database import get_workspace
+        user = _login(client, "sub-ana", "ana@x.com", "Ana")
+        client.post(f"/api/workspace/{workspace.slug}/claim")
+        assert get_workspace(workspace.slug).owner_id == user.id
+        resp = client.delete(f"/api/workspace/{workspace.slug}")
+        assert resp.status_code == 200
+        assert get_workspace(workspace.slug) is None
+
+
 class TestExportCSV:
     def test_export_csv(self, client, workspace, members):
         resp = client.get(f"/api/workspace/{workspace.slug}/export.csv")

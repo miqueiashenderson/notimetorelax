@@ -63,6 +63,9 @@ class Workspace(Base):
     slug: Mapped[str] = mapped_column(unique=True, nullable=False)
     name: Mapped[str] = mapped_column(nullable=False)
     password_hash: Mapped[str] = mapped_column(nullable=True)
+    owner_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
     created_at: Mapped[str] = mapped_column(
         default=lambda: datetime.now(timezone.utc).isoformat()
     )
@@ -73,6 +76,7 @@ class Workspace(Base):
             "slug": self.slug,
             "name": self.name,
             "has_password": bool(self.password_hash),
+            "owner_id": self.owner_id,
             "created_at": self.created_at,
         }
 
@@ -198,17 +202,24 @@ def _migrate(engine):
     from sqlalchemy import inspect, text
 
     insp = inspect(engine)
-    if "members" not in set(insp.get_table_names()):
-        return
-    member_cols = {c["name"] for c in insp.get_columns("members")}
-    with engine.begin() as conn:
-        if "extra_busy" not in member_cols:
-            conn.execute(text("ALTER TABLE members ADD COLUMN extra_busy TEXT DEFAULT '[]'"))
-        if "user_id" not in member_cols:
-            conn.execute(text("ALTER TABLE members ADD COLUMN user_id INTEGER"))
+    tables = set(insp.get_table_names())
+
+    if "members" in tables:
+        member_cols = {c["name"] for c in insp.get_columns("members")}
+        with engine.begin() as conn:
+            if "extra_busy" not in member_cols:
+                conn.execute(text("ALTER TABLE members ADD COLUMN extra_busy TEXT DEFAULT '[]'"))
+            if "user_id" not in member_cols:
+                conn.execute(text("ALTER TABLE members ADD COLUMN user_id INTEGER"))
+
+    if "workspaces" in tables:
+        ws_cols = {c["name"] for c in insp.get_columns("workspaces")}
+        with engine.begin() as conn:
+            if "owner_id" not in ws_cols:
+                conn.execute(text("ALTER TABLE workspaces ADD COLUMN owner_id INTEGER"))
 
 
-def create_workspace(name: str, password: str | None = None):
+def create_workspace(name: str, password: str | None = None, owner_id: int | None = None):
     base_slug = slugify(name)
     slug = base_slug
     with Session(get_engine()) as sess:
@@ -217,7 +228,7 @@ def create_workspace(name: str, password: str | None = None):
             slug = f"{base_slug}-{counter}"
             counter += 1
         pw_hash = hash_password(password) if password else None
-        ws = Workspace(slug=slug, name=name, password_hash=pw_hash)
+        ws = Workspace(slug=slug, name=name, password_hash=pw_hash, owner_id=owner_id)
         sess.add(ws)
         sess.commit()
         sess.refresh(ws)
@@ -227,6 +238,32 @@ def create_workspace(name: str, password: str | None = None):
 def get_workspace(slug: str):
     with Session(get_engine()) as sess:
         return sess.query(Workspace).filter_by(slug=slug).first()
+
+
+def delete_workspace(slug: str):
+    with Session(get_engine()) as sess:
+        ws = sess.query(Workspace).filter_by(slug=slug).first()
+        if not ws:
+            return False
+        sess.query(Member).filter_by(workspace_id=ws.id).delete()
+        sess.delete(ws)
+        sess.commit()
+        return True
+
+
+def claim_workspace(slug: str, owner_id: int):
+    """Atribui o usuário como criador do workspace se ainda não houver dono.
+    Retorna o workspace atualizado, None se não existir, ou False se já tiver dono."""
+    with Session(get_engine()) as sess:
+        ws = sess.query(Workspace).filter_by(slug=slug).first()
+        if not ws:
+            return None
+        if ws.owner_id is not None:
+            return False
+        ws.owner_id = owner_id
+        sess.commit()
+        sess.refresh(ws)
+        return ws
 
 
 def get_members(workspace_id: int):
