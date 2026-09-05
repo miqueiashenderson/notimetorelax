@@ -228,6 +228,11 @@
 </div>
 
 <script>
+function esc(s){
+  return String(s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
 const dropzone = document.getElementById('dropzone');
 const fileInput = document.getElementById('fileInput');
 const erro = document.getElementById('erro');
@@ -319,7 +324,7 @@ async function handleFile(file){
     if(pdfName && !match){
       document.getElementById('pvPdfNome').textContent = pdfName;
       pvPdfNomeRow.style.display = '';
-      aviso.innerHTML = 'Atenção: o PDF identifica <b>' + pdfName + '</b>, que é diferente do nome que você digitou. <b>Se este for o seu PDF</b>, pode continuar do mesmo jeito.';
+      aviso.innerHTML = 'Atenção: o PDF identifica <b>' + esc(pdfName) + '</b>, que é diferente do nome que você digitou. <b>Se este for o seu PDF</b>, pode continuar do mesmo jeito.';
       aviso.style.display = 'block';
       btnConfirmar.textContent = 'Confirmar e salvar do mesmo jeito';
     }else{

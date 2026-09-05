@@ -1,4 +1,4 @@
-import os, time, hashlib, hmac, secrets, urllib.parse, unicodedata, csv, io
+import os, time, hashlib, hmac, secrets, urllib.parse, unicodedata, csv, io, logging, threading
 import httpx
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request, UploadFile, File, Form, Query
@@ -6,6 +6,8 @@ from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse, Resp
 from fastapi.templating import Jinja2Templates
 
 load_dotenv()
+
+logger = logging.getLogger("notimetorelax")
 
 from database import (
     init_db, create_workspace, get_workspace, get_members, get_member,
@@ -17,7 +19,19 @@ from extractor import extrair_de_pdf_bytes, title_case, SLOTS
 ALL_DAYS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]
 
 SESSION_TTL = 86400 * 30
-SESSION_SECRET = os.environ.get("SESSION_SECRET") or secrets.token_hex(32)
+
+DEBUG = os.environ.get("DEBUG", "").strip().lower() in {"1", "true", "yes"}
+
+_cfg_secret = os.environ.get("SESSION_SECRET", "").strip()
+if _cfg_secret:
+    SESSION_SECRET = _cfg_secret
+elif DEBUG:
+    SESSION_SECRET = secrets.token_hex(32)
+else:
+    raise RuntimeError(
+        "SESSION_SECRET não configurada. Defina a variável de ambiente "
+        "SESSION_SECRET (ou rode com DEBUG=1 apenas em desenvolvimento)."
+    )
 
 GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "").strip()
 GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "").strip()
@@ -36,9 +50,56 @@ def _ensure_db():
         _db_ready = True
 
 
+def _hmac_sig(payload: str) -> str:
+    return hmac.new(SESSION_SECRET.encode(), payload.encode(), hashlib.sha256).hexdigest()
+
+
+# ── Rate limiting simples em memória (sem dependência externa) ──────────────
+_RL: dict[str, list[float]] = {}
+_RL_LOCK = threading.Lock()
+
+
+def _rate_limit(key: str, limit: int, window: float) -> bool:
+    """True se a requisição passa; False se estourou o limite de tentativas."""
+    now = time.time()
+    with _RL_LOCK:
+        hits = _RL.setdefault(key, [])
+        hits[:] = [t for t in hits if now - t < window]
+        if len(hits) >= limit:
+            return False
+        hits.append(now)
+        if len(_RL) > 10_000:
+            for k in [k for k, v in list(_RL.items()) if not v or v[-1] < now - 600]:
+                del _RL[k]
+        return True
+
+
+def _client_ip(request: Request) -> str:
+    xff = request.headers.get("x-forwarded-for")
+    if xff:
+        return xff.split(",")[0].strip()
+    return request.client.host if request.client else "?"
+
+
+def _is_same_origin(request: Request) -> bool:
+    origin = request.headers.get("origin")
+    if not origin:
+        return True
+    o = urllib.parse.urlparse(origin)
+    b = urllib.parse.urlparse(str(request.base_url))
+    return (o.scheme, o.netloc) == (b.scheme, b.netloc)
+
+
+def _csv_safe(texto: str) -> str:
+    """Neutraliza fórmulas de planilha (CSV injection)."""
+    if not texto:
+        return texto
+    return "'" + texto if texto[0] in "=+-@\t\r" else texto
+
+
 def _make_session_token(slug: str) -> str:
     payload = f"{slug}:{int(time.time()) + SESSION_TTL}"
-    sig = hmac.new(SESSION_SECRET.encode(), payload.encode(), hashlib.sha256).hexdigest()[:16]
+    sig = _hmac_sig(payload)
     return f"{payload}.{sig}"
 
 
@@ -48,7 +109,7 @@ def _check_session(request: Request, slug: str) -> bool:
         return False
     try:
         payload, sig = cookie.rsplit(".", 1)
-        expected = hmac.new(SESSION_SECRET.encode(), payload.encode(), hashlib.sha256).hexdigest()[:16]
+        expected = _hmac_sig(payload)
         if not hmac.compare_digest(sig, expected):
             return False
         data_slug, expiry = payload.rsplit(":", 1)
@@ -63,7 +124,7 @@ def _require_auth(request: Request, ws) -> bool:
 
 def _make_user_session_token(user_id: int) -> str:
     payload = f"{user_id}:{int(time.time()) + SESSION_TTL}"
-    sig = hmac.new(SESSION_SECRET.encode(), payload.encode(), hashlib.sha256).hexdigest()[:16]
+    sig = _hmac_sig(payload)
     return f"{payload}.{sig}"
 
 
@@ -73,7 +134,7 @@ def _get_current_user(request: Request):
         return None
     try:
         payload, sig = cookie.rsplit(".", 1)
-        expected = hmac.new(SESSION_SECRET.encode(), payload.encode(), hashlib.sha256).hexdigest()[:16]
+        expected = _hmac_sig(payload)
         if not hmac.compare_digest(sig, expected):
             return None
         user_id, expiry = payload.rsplit(":", 1)
@@ -97,7 +158,7 @@ def _current_user_id(request: Request):
         return None
     try:
         payload, sig = cookie.rsplit(".", 1)
-        expected = hmac.new(SESSION_SECRET.encode(), payload.encode(), hashlib.sha256).hexdigest()[:16]
+        expected = _hmac_sig(payload)
         if not hmac.compare_digest(sig, expected):
             return None
         user_id, expiry = payload.rsplit(":", 1)
@@ -125,29 +186,51 @@ def _redirect_url(path: str, erro: str = "") -> str:
 app = FastAPI(title="NoTimeToRelax")
 
 
+_ERRO_GENERICO_PAGE = (
+    "<!doctype html><html lang='pt-BR'><meta charset='utf-8'>"
+    "<title>NoTimeToRelax</title>"
+    "<body style='font-family:sans-serif;max-width:640px;margin:60px auto;padding:0 20px'>"
+    "<h2>Erro interno</h2>"
+    "<p>Algo deu errado. Tente novamente em instantes.</p>"
+    "</body></html>"
+)
+
+
 @app.middleware("http")
 async def ensure_db(request: Request, call_next):
     try:
         _ensure_db()
-        return await call_next(request)
-    except RuntimeError as e:
-        msg = str(e)
+    except Exception:
+        logger.exception("Falha ao inicializar o banco de dados")
         if request.url.path.startswith("/api"):
-            return JSONResponse({"erro": msg}, status_code=500)
-        html = (
-            "<!doctype html><html lang='pt-BR'><meta charset='utf-8'>"
-            "<title>NoTimeToRelax</title>"
-            "<body style='font-family:sans-serif;max-width:640px;margin:60px auto;padding:0 20px'>"
-            f"<h2>Banco de dados indisponível</h2>"
-            f"<p>{msg}</p>"
-            "</body></html>"
-        )
-        return HTMLResponse(html, status_code=500)
-    except Exception as e:
-        return JSONResponse(
-            {"erro": f"Erro interno: {type(e).__name__}: {e}"},
-            status_code=500,
-        )
+            return JSONResponse({"erro": "Banco de dados indisponível."}, status_code=500)
+        return HTMLResponse(_ERRO_GENERICO_PAGE, status_code=500)
+    if (
+        request.method in ("POST", "PATCH", "DELETE", "PUT")
+        and request.url.path.startswith("/api")
+        and not _is_same_origin(request)
+    ):
+        return JSONResponse({"erro": "Acesso negado."}, status_code=403)
+    try:
+        response = await call_next(request)
+    except Exception:
+        logger.exception("Erro interno na aplicação")
+        if request.url.path.startswith("/api"):
+            return JSONResponse({"erro": "Erro interno."}, status_code=500)
+        return HTMLResponse(_ERRO_GENERICO_PAGE, status_code=500)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    response.headers.setdefault(
+        "Content-Security-Policy",
+        "default-src 'self'; script-src 'self' 'unsafe-inline'; "
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+        "font-src 'self' https://fonts.gstatic.com data:; "
+        "img-src 'self' data: https:; connect-src 'self'",
+    )
+    if not DEBUG:
+        response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+    return response
 
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -190,8 +273,8 @@ def google_login(request: Request, next: str = Query("/")):
     }
     url = GOOGLE_AUTH_URL + "?" + urllib.parse.urlencode(params)
     resp = RedirectResponse(url=url, status_code=302)
-    resp.set_cookie(key="oauth_state", value=state, httponly=True, max_age=600, path="/", samesite="lax")
-    resp.set_cookie(key="oauth_next", value=next_path, httponly=True, max_age=600, path="/", samesite="lax")
+    resp.set_cookie(key="oauth_state", value=state, httponly=True, max_age=600, path="/", samesite="lax", secure=not DEBUG)
+    resp.set_cookie(key="oauth_next", value=next_path, httponly=True, max_age=600, path="/", samesite="lax", secure=not DEBUG)
     return resp
 
 
@@ -252,7 +335,7 @@ def google_callback(request: Request):
     resp = RedirectResponse(url=next_path, status_code=302)
     resp.set_cookie(
         key="user_session", value=_make_user_session_token(user.id),
-        httponly=True, max_age=SESSION_TTL, path="/", samesite="lax",
+        httponly=True, max_age=SESSION_TTL, path="/", samesite="lax", secure=not DEBUG,
     )
     resp.delete_cookie(key="oauth_state", path="/")
     resp.delete_cookie(key="oauth_next", path="/")
@@ -344,13 +427,15 @@ async def api_create_workspace(request: Request, name: str = Form(...), password
         token = _make_session_token(ws.slug)
         resp.set_cookie(
             key=f"ws_{ws.slug}", value=token,
-            httponly=True, max_age=SESSION_TTL, samesite="lax",
+            httponly=True, max_age=SESSION_TTL, path="/", samesite="lax", secure=not DEBUG,
         )
     return resp
 
 
 @app.get("/api/workspace/{slug}/exists")
-async def api_workspace_exists(slug: str):
+async def api_workspace_exists(slug: str, request: Request):
+    if not _rate_limit(f"exists:{_client_ip(request)}", limit=60, window=60):
+        return JSONResponse({"erro": "Muitas requisições."}, status_code=429)
     ws = get_workspace(slug)
     if not ws:
         return JSONResponse({"exists": False})
@@ -401,7 +486,7 @@ async def api_export_csv(request: Request, slug: str):
     for s, slot in enumerate(SLOTS):
         linha = [slot]
         for d in range(len(dias)):
-            livres = [mb["name"] for mb in membros if _livre(mb, d, s)]
+            livres = [_csv_safe(mb["name"]) for mb in membros if _livre(mb, d, s)]
             linha.append(f"{len(livres)} livres: " + ", ".join(livres) if livres else "0 livres")
         writer.writerow(linha)
 
@@ -473,6 +558,8 @@ async def api_auth(slug: str, request: Request):
         return JSONResponse({"erro": "Faça login com Google."}, status_code=401)
     if not ws.password_hash:
         return JSONResponse({"erro": "Workspace não possui senha."}, status_code=400)
+    if not _rate_limit(f"auth:{slug}", limit=10, window=60):
+        return JSONResponse({"erro": "Muitas tentativas. Tente novamente em instantes."}, status_code=429)
     body = await request.json()
     password = body.get("password", "")
     if not check_password(password, ws.password_hash):
@@ -481,7 +568,7 @@ async def api_auth(slug: str, request: Request):
     resp = JSONResponse({"ok": True})
     resp.set_cookie(
         key=f"ws_{ws.slug}", value=token,
-        httponly=True, max_age=SESSION_TTL, samesite="lax",
+        httponly=True, max_age=SESSION_TTL, path="/", samesite="lax", secure=not DEBUG,
     )
     return resp
 
@@ -496,13 +583,24 @@ async def api_add_member(slug: str, request: Request):
     if not _require_auth(request, ws):
         return JSONResponse({"erro": "Acesso negado."}, status_code=403)
     body = await request.json()
-    nome = body.get("nome", "").strip()
+    nome_raw = body.get("nome", "")
     curso = body.get("curso", "")
     busy = body.get("busy", [])
     force = body.get("force", False)
-    if not nome:
+    if not isinstance(nome_raw, str) or not nome_raw.strip():
         return JSONResponse({"erro": "Nome é obrigatório."}, status_code=400)
-    nome_norm = title_case(unicodedata.normalize("NFC", nome.lower()))
+    if not isinstance(curso, str):
+        curso = ""
+    if not isinstance(busy, list):
+        return JSONResponse({"erro": "busy deve ser uma lista de horários."}, status_code=400)
+    for item in busy:
+        if (
+            not isinstance(item, list) or len(item) != 2
+            or not all(isinstance(x, int) and not isinstance(x, bool) for x in item)
+            or not (0 <= item[0] <= 6 and 0 <= item[1] <= 13)
+        ):
+            return JSONResponse({"erro": "busy contém horários inválidos."}, status_code=400)
+    nome_norm = title_case(unicodedata.normalize("NFC", nome_raw.lower().strip()))
     user = _get_current_user(request)
     member, erro = add_member(ws.id, nome_norm, curso, busy, force=force, user_id=(user.id if user else None))
     if erro:
@@ -528,6 +626,8 @@ async def api_update_extra_busy(slug: str, member_id: int, request: Request):
         for item in extra_busy
         if isinstance(item, list) and len(item) == 2
         and isinstance(item[0], int) and isinstance(item[1], int)
+        and not isinstance(item[0], bool) and not isinstance(item[1], bool)
+        and 0 <= item[0] <= 6 and 0 <= item[1] <= 13
     ]
     user_id = _current_user_id(request)
     if not user_id:
@@ -549,7 +649,7 @@ async def api_remove_member(request: Request, slug: str, member_id: int):
         return JSONResponse({"erro": "Faça login com Google."}, status_code=401)
     if not _require_auth(request, ws):
         return JSONResponse({"erro": "Acesso negado."}, status_code=403)
-    ok = remove_member(member_id)
+    ok = remove_member(member_id, ws.id)
     if not ok:
         return JSONResponse({"erro": "Membro não encontrado."}, status_code=404)
     return JSONResponse({"ok": True})

@@ -90,15 +90,29 @@ def test_get_members_empty_workspace(session):
 
 
 def test_remove_member(session, members):
-    ok = remove_member(members[0].id)
+    ok = remove_member(members[0].id, members[0].workspace_id)
     assert ok is True
     remaining = get_members(members[0].workspace_id)
     assert len(remaining) == 1
     assert remaining[0].id == members[1].id
 
 
-def test_remove_nonexistent_member(session):
-    assert remove_member(9999) is False
+def test_remove_nonexistent_member(session, workspace):
+    assert remove_member(9999, workspace.id) is False
+
+
+def test_remove_member_nao_remove_de_outro_workspace(session, workspace):
+    outro = Workspace(slug="outro", name="Outro")
+    session.add(outro)
+    session.commit()
+    session.refresh(outro)
+    _, erro = add_member(outro.id, "Roubo", "CC", [])
+    assert erro is None
+    outros = get_members(outro.id)
+    assert len(outros) == 1
+    ok = remove_member(outros[0].id, workspace.id)
+    assert ok is False
+    assert get_member(outros[0].id) is not None
 
 
 def test_hash_password():

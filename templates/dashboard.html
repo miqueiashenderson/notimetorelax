@@ -595,6 +595,11 @@
 <div id="gridTooltip" class="grid-tooltip"></div>
 
 <script>
+function esc(s){
+  return String(s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
 function copiarLink(btn){
   const url = window.location.origin + '/workspace/{{ workspace.slug }}';
   if(navigator.clipboard && navigator.clipboard.writeText){
@@ -676,7 +681,7 @@ function renderMembers(){
     const chip = document.createElement('div');
     chip.className = 'chip' + (active.has(m.name)?'':' off');
     const isMine = USER && m.user_id === USER.id;
-    chip.innerHTML = `<span class="dot" style="background:${m.color}"></span>${m.name}${isMine ? ' (você)' : ''}`;
+    chip.innerHTML = `<span class="dot" style="background:${m.color}"></span>${esc(m.name)}${isMine ? ' (você)' : ''}`;
     chip.title = active.has(m.name) ? 'Clique para desativar este membro da grade' : 'Clique para ativar este membro na grade';
     chip.onclick = ()=>{
       active.has(m.name) ? active.delete(m.name) : active.add(m.name);
@@ -731,8 +736,8 @@ function showTooltip(e, dayLabel, timeLabel, free, busy, total, d, s){
   if(!tooltip) return;
   const ratio = total > 0 ? Math.round((free.length / total) * 100) : 0;
   
-  let freeTags = free.length ? free.map(m=>`<span class="tt-item free"><span class="avatar-dot" style="background:${m.color}"></span>${m.name}</span>`).join('') : '<span style="color:var(--dim);font-size:11px;">Nenhum</span>';
-  let busyTags = busy.length ? busy.map(m=>`<span class="tt-item busy"><span class="avatar-dot busy ${isExtraBusy(m,d,s) ? 'extra' : ''}" style="background:${m.color}"></span>${m.name} <span style="color:var(--dim);font-size:10px;">(${busyReason(m,d,s)})</span></span>`).join('') : '<span style="color:var(--dim);font-size:11px;">Ninguém ocupado</span>';
+  let freeTags = free.length ? free.map(m=>`<span class="tt-item free"><span class="avatar-dot" style="background:${m.color}"></span>${esc(m.name)}</span>`).join('') : '<span style="color:var(--dim);font-size:11px;">Nenhum</span>';
+  let busyTags = busy.length ? busy.map(m=>`<span class="tt-item busy"><span class="avatar-dot busy ${isExtraBusy(m,d,s) ? 'extra' : ''}" style="background:${m.color}"></span>${esc(m.name)} <span style="color:var(--dim);font-size:10px;">(${busyReason(m,d,s)})</span></span>`).join('') : '<span style="color:var(--dim);font-size:11px;">Ninguém ocupado</span>';
 
   tooltip.innerHTML = `
     <div class="tt-head">${DAY_NAMES_FULL[dayLabel] || dayLabel} · ${timeLabel}</div>
@@ -815,13 +820,13 @@ function renderGrid(){
           contentHtml = `
             <div class="cell-status">
               <span class="badge-full-free">100% LIVRE</span>
-              <div class="avatar-row">${free.map(m=>`<span class="avatar-dot" style="background:${m.color}" title="${m.name} (livre)"></span>`).join('')}</div>
+              <div class="avatar-row">${free.map(m=>`<span class="avatar-dot" style="background:${m.color}" title="${esc(m.name)} (livre)"></span>`).join('')}</div>
             </div>`;
         } else if (freeCount === 0) {
           contentHtml = `
             <div class="cell-status">
               <span class="badge-full-busy">0 LIVRES</span>
-              <div class="avatar-row">${busy.map(m=>`<span class="avatar-dot busy ${isExtraBusy(m,d,s) ? 'extra' : ''}" style="background:${m.color}" title="${m.name} (${busyReason(m,d,s)})"></span>`).join('')}</div>
+              <div class="avatar-row">${busy.map(m=>`<span class="avatar-dot busy ${isExtraBusy(m,d,s) ? 'extra' : ''}" style="background:${m.color}" title="${esc(m.name)} (${busyReason(m,d,s)})"></span>`).join('')}</div>
             </div>`;
         } else {
           contentHtml = `
@@ -831,7 +836,7 @@ function renderGrid(){
                 <span class="badge-busy-text">${busyCount}</span>
               </div>
               <div class="avatar-row">
-                ${free.map(m=>`<span class="avatar-dot" style="background:${m.color}" title="${m.name} (livre)"></span>`).join('')}
+                ${free.map(m=>`<span class="avatar-dot" style="background:${m.color}" title="${esc(m.name)} (livre)"></span>`).join('')}
               </div>
             </div>`;
         }
@@ -842,7 +847,7 @@ function renderGrid(){
         } else {
           let html = `<div class="name-list-cell">`;
           free.slice(0, 3).forEach(m => {
-            html += `<span class="name-tag" style="border-left:2px solid ${m.color}"><span class="avatar-dot" style="background:${m.color}"></span>${m.name.split(' ')[0]}</span>`;
+            html += `<span class="name-tag" style="border-left:2px solid ${m.color}"><span class="avatar-dot" style="background:${m.color}"></span>${esc(m.name.split(' ')[0])}</span>`;
           });
           if (free.length > 3) html += `<span style="font-size:8.5px;color:var(--dim);text-align:center;">+${free.length-3} outros</span>`;
           html += `</div>`;
@@ -855,7 +860,7 @@ function renderGrid(){
           let html = `<div class="name-list-cell">`;
           busy.slice(0, 3).forEach(m => {
             const extra = isExtraBusy(m, d, s);
-            html += `<span class="name-tag" style="border-left:2px solid ${extra ? '#ff9f43' : '#ff6b6b'}"><span class="avatar-dot busy ${extra ? 'extra' : ''}" style="background:${m.color}"></span>${m.name.split(' ')[0]} <span style="color:var(--dim);font-size:8px;">(${busyReason(m,d,s)})</span></span>`;
+            html += `<span class="name-tag" style="border-left:2px solid ${extra ? '#ff9f43' : '#ff6b6b'}"><span class="avatar-dot busy ${extra ? 'extra' : ''}" style="background:${m.color}"></span>${esc(m.name.split(' ')[0])} <span style="color:var(--dim);font-size:8px;">(${busyReason(m,d,s)})</span></span>`;
           });
           if (busy.length > 3) html += `<span style="font-size:8.5px;color:var(--dim);text-align:center;">+${busy.length-3} outros</span>`;
           html += `</div>`;
@@ -913,7 +918,7 @@ function refreshSlotBanner(){
   document.getElementById('bannerSlotTitle').textContent = `${DAY_NAMES_FULL[dayLabel] || dayLabel} às ${slotLabel}`;
   document.getElementById('bannerSlotStats').innerHTML = `
     <span><b>${free.length} livres:</b> ${free.map(m=>m.name).join(', ') || 'Ninguém'}</span>
-    <span><b>${busy.length} ocupados:</b> ${busy.map(m=>`${m.name} (${busyReason(m, d, s)})`).join(', ') || 'Ninguém'}</span>
+    <span><b>${busy.length} ocupados:</b> ${busy.map(m=>`${esc(m.name)} (${busyReason(m, d, s)})`).join(', ') || 'Ninguém'}</span>
   `;
   banner.classList.add('show');
 }
@@ -930,7 +935,7 @@ function copySlotMeetingInfo(btn){
   const { dayLabel, slotLabel, d, s, free, busy } = selectedSlotData;
   const text = `Reunião da Equipe — ${DAY_NAMES_FULL[dayLabel] || dayLabel} (${slotLabel})
 Disponíveis (${free.length}): ${free.map(m=>m.name).join(', ') || 'Ninguém'}
-Ocupados (${busy.length}): ${busy.map(m=>`${m.name} (${busyReason(m, d, s)})`).join(', ') || 'Ninguém'}
+Ocupados (${busy.length}): ${busy.map(m=>`${esc(m.name)} (${busyReason(m, d, s)})`).join(', ') || 'Ninguém'}
 Link da grade: ${window.location.origin}/workspace/{{ workspace.slug }}`;
 
   if(navigator.clipboard && navigator.clipboard.writeText){
@@ -951,9 +956,9 @@ function showDetail(d,s,label){
 
   document.getElementById('detailHead').textContent = `${DAY_NAMES_FULL[ALL_DAYS[d]] || ALL_DAYS[d]} · ${label}`;
   document.getElementById('freeList').innerHTML = free.map(m=>
-    `<li><span class="dot" style="background:${m.color}"></span>${m.name}</li>`).join('') || '<li style="color:var(--dim)">ninguém livre</li>';
+    `<li><span class="dot" style="background:${m.color}"></span>${esc(m.name)}</li>`).join('') || '<li style="color:var(--dim)">ninguém livre</li>';
   document.getElementById('busyList').innerHTML = busy.map(m=>
-    `<li><span class="dot" style="background:${m.color}"></span>${m.name} <span style="color:var(--dim);font-size:11px;">(${busyReason(m,d,s)})</span></li>`).join('') || '<li style="color:var(--dim)">ninguém ocupado</li>';
+    `<li><span class="dot" style="background:${m.color}"></span>${esc(m.name)} <span style="color:var(--dim);font-size:11px;">(${busyReason(m,d,s)})</span></li>`).join('') || '<li style="color:var(--dim)">ninguém ocupado</li>';
   document.getElementById('detail').classList.add('show');
 }
 

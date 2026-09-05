@@ -1,7 +1,7 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from database import get_or_create_user, add_member
+from database import get_or_create_user, add_member, get_member, Workspace
 
 
 def _login(client, sub, email, name=""):
@@ -147,6 +147,18 @@ class TestMembersAPI:
         resp = client.delete(f"/api/workspace/{workspace.slug}/members/9999")
         assert resp.status_code == 404
 
+    def test_delete_cannot_remove_member_of_another_workspace(self, client, session, workspace):
+        outro = Workspace(slug="outro", name="Outro")
+        session.add(outro)
+        session.commit()
+        session.refresh(outro)
+        m, erro = add_member(outro.id, "Vítima", "CC", [])
+        assert erro is None
+        resp = client.delete(f"/api/workspace/{workspace.slug}/members/{m.id}")
+        assert resp.status_code == 404
+        assert resp.json()["erro"] == "Membro não encontrado."
+        assert get_member(m.id) is not None
+
     def test_delete_requires_auth(self, client, workspace_with_password, members):
         resp = client.delete(
             f"/api/workspace/{workspace_with_password.slug}/members/{members[0].id}"
@@ -176,6 +188,31 @@ class TestMembersAPI:
         )
         assert resp.status_code == 200
         assert resp.json()["name"] == "Carlos Silva"
+
+    def test_add_member_rejects_invalid_busy(self, client, workspace):
+        resp = client.post(
+            f"/api/workspace/{workspace.slug}/members",
+            json={"nome": "Carlos", "busy": [[0, 99]]},
+        )
+        assert resp.status_code == 400
+        assert "inválido" in resp.json()["erro"]
+
+    def test_add_member_rejects_dict_busy(self, client, workspace):
+        resp = client.post(
+            f"/api/workspace/{workspace.slug}/members",
+            json={"nome": "Carlos", "busy": {"0": 1}},
+        )
+        assert resp.status_code == 400
+
+    def test_add_member_sanitizes_html_in_name(self, client, workspace):
+        resp = client.post(
+            f"/api/workspace/{workspace.slug}/members",
+            json={"nome": "<script>alert(1)</script>Maria", "busy": []},
+        )
+        assert resp.status_code == 200
+        assert "<" not in resp.json()["name"]
+        assert ">" not in resp.json()["name"]
+        assert "maria" in resp.json()["name"].lower()
 
 
 class TestExportCSV:

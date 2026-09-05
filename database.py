@@ -1,4 +1,4 @@
-import json, os, re, hashlib, secrets, unicodedata, socket
+import json, os, re, hashlib, hmac, secrets, unicodedata, socket
 from urllib.parse import urlparse, urlunparse
 from dotenv import load_dotenv
 from sqlalchemy import create_engine, ForeignKey, text
@@ -164,9 +164,20 @@ def hash_password(password: str) -> str:
 def check_password(password: str, stored: str) -> bool:
     try:
         salt, h = stored.split(":", 1)
-        return h == hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), 100_000).hex()
+        calc = hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), 100_000).hex()
+        return hmac.compare_digest(h, calc)
     except Exception:
         return False
+
+
+def _sanitize_texto(valor: str, max_len: int = 120) -> str:
+    """Remove tags/ângulos e caracteres de controle antes de gravar no banco."""
+    if not valor:
+        return ""
+    t = valor.strip().replace("<", "").replace(">", "")
+    t = re.sub(r"[\x00-\x1f\x7f]", "", t)
+    t = re.sub(r"\s+", " ", t)
+    return t[:max_len]
 
 
 def slugify(name: str) -> str:
@@ -319,6 +330,8 @@ def update_own_extra_busy(member_id: int, extra_busy: list, workspace_id: int, o
 def add_member(
     workspace_id: int, name: str, course: str, busy: list, force: bool = False, user_id: int | None = None
 ):
+    name = _sanitize_texto(name)
+    course = _sanitize_texto(course, max_len=60)
     with Session(get_engine()) as sess:
         existing = None
         if user_id is not None and force:
@@ -370,9 +383,9 @@ def add_member(
         return member, None
 
 
-def remove_member(member_id: int):
+def remove_member(member_id: int, workspace_id: int):
     with Session(get_engine()) as sess:
-        m = sess.query(Member).filter_by(id=member_id).first()
+        m = sess.query(Member).filter_by(id=member_id, workspace_id=workspace_id).first()
         if m:
             sess.delete(m)
             sess.commit()
