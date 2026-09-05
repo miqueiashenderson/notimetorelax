@@ -109,8 +109,14 @@
   .btn:hover{border-color:var(--cyan);background:rgba(61, 219, 217, 0.08);}
   .btn-primary{border-color:var(--cyan);background:rgba(61, 219, 217, 0.12);color:var(--cyan);font-weight:600;}
   .btn-primary:hover{background:var(--cyan);color:var(--bg);}
+  .btn-danger{border-color:var(--magenta);color:var(--magenta);}
+  .btn-danger:hover{border-color:var(--magenta);background:rgba(238, 83, 150, 0.14);}
+  .btn-danger:disabled{opacity:.5;cursor:not-allowed;}
   .btn-view.active{background:var(--cyan);color:var(--bg);border-color:var(--cyan);font-weight:700;}
   .btn-filter.active{background:var(--yellow);color:var(--bg);border-color:var(--yellow);font-weight:700;}
+  .danger-panel{border-color:#5c1e2e;}
+  .danger-panel h2{color:var(--magenta);}
+  .danger-copy{font-size:12.5px;color:var(--dim);line-height:1.5;margin:0 0 12px;}
 
   .members{display:flex;flex-wrap:wrap;gap:8px;}
   .chip{
@@ -598,6 +604,12 @@
   </section>
   {% endif %}
 
+  <section class="panel danger-panel" id="deleteWorkspacePanel"{% if not (user and workspace.owner_id and user.id == workspace.owner_id) %} hidden{% endif %}>
+    <h2>Zona de perigo</h2>
+    <p class="danger-copy">Apagar o workspace remove a equipe, os PDFs cadastrados e a grade. Só o criador pode fazer isso, e não dá para desfazer.</p>
+    <button class="btn btn-danger" type="button" id="btnDeleteWorkspace">Apagar este workspace</button>
+  </section>
+
   <footer>
     <a href="/" style="color:var(--dim);text-decoration:none;">NoTimeToRelax</a>
   </footer>
@@ -652,6 +664,7 @@ const SLOTS = [
 
 let MEMBERS = {{ members|tojson }};
 let USER = {{ user|tojson }};
+let WORKSPACE = {{ workspace|tojson }};
 const active = new Set(MEMBERS.map(m=>m.name));
 
 // Detectar se há ocupações no Sábado (d=5) ou Domingo (d=6)
@@ -1071,6 +1084,38 @@ if(btnEditExtra){
 if(btnSaveExtra) btnSaveExtra.addEventListener('click', saveExtraBusy);
 if(btnCancelEdit) btnCancelEdit.addEventListener('click', endEdit);
 
+function showDeleteWorkspacePanel(){
+  const panel = document.getElementById('deleteWorkspacePanel');
+  if(panel) panel.hidden = false;
+}
+
+function deleteWorkspace(){
+  const btn = document.getElementById('btnDeleteWorkspace');
+  const nome = WORKSPACE && WORKSPACE.name ? WORKSPACE.name : 'este workspace';
+  const ok = confirm(`Apagar o workspace "${nome}" e todos os integrantes?\n\nEssa ação não pode ser desfeita.`);
+  if(!ok) return;
+  if(btn) btn.disabled = true;
+  fetch(`/api/workspace/{{ workspace.slug }}`, {method:'DELETE'})
+    .then(r => r.json().then(data => ({ok: r.ok, data})))
+    .then(({ok, data}) => {
+      if(!ok || data.erro){
+        alert(data.erro || 'Não foi possível apagar o workspace.');
+        if(btn) btn.disabled = false;
+        return;
+      }
+      window.location.href = '/';
+    })
+    .catch(() => {
+      alert('Erro ao apagar o workspace. Tente novamente.');
+      if(btn) btn.disabled = false;
+    });
+}
+
+const btnDeleteWorkspace = document.getElementById('btnDeleteWorkspace');
+if(btnDeleteWorkspace){
+  btnDeleteWorkspace.addEventListener('click', deleteWorkspace);
+}
+
 const btnClaim = document.getElementById('btnClaimOwner');
 if(btnClaim){
   btnClaim.addEventListener('click', ()=>{
@@ -1083,7 +1128,9 @@ if(btnClaim){
           btnClaim.disabled = false;
           return;
         }
+        WORKSPACE = data;
         document.getElementById('claimPanel')?.remove();
+        showDeleteWorkspacePanel();
       })
       .catch(() => {
         alert('Erro ao vincular. Tente novamente.');

@@ -70,6 +70,25 @@ class TestDashboardPage:
         assert resp.status_code == 302
         assert "/login" in resp.headers["location"]
 
+    def test_dashboard_shows_delete_button_for_owner(self, client):
+        _login(client, "sub-ana", "ana@x.com", "Ana")
+        slug = client.post("/api/workspace", data={"name": "Turma Ana"}).json()["slug"]
+        resp = client.get(f"/workspace/{slug}")
+        assert resp.status_code == 200
+        assert 'id="btnDeleteWorkspace"' in resp.text
+        assert 'id="deleteWorkspacePanel"' in resp.text
+        assert 'hidden' not in resp.text.split('id="deleteWorkspacePanel"')[1].split(">")[0]
+
+    def test_dashboard_hides_delete_button_for_non_owner(self, client, workspace, session):
+        ana = get_or_create_user("sub-ana", "ana@x.com", "Ana")
+        workspace.owner_id = ana.id
+        session.commit()
+        _login(client, "sub-bob", "bob@x.com", "Bob")
+        resp = client.get(f"/workspace/{workspace.slug}")
+        assert resp.status_code == 200
+        panel_attrs = resp.text.split('id="deleteWorkspacePanel"')[1].split(">")[0]
+        assert "hidden" in panel_attrs
+
 
 class TestLoginPage:
     def test_login_page_renders(self, client, workspace_with_password):
