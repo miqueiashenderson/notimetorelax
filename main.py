@@ -302,14 +302,16 @@ def _busy_por_membro(members_dict) -> dict:
 def _conflicts_for_cells(ws, team_id: int, cells, busy=None) -> dict:
     """Conflitos de VÁRIAS células de uma equipe em uma só passada ao banco.
 
-    Busca os membros e os integrantes da equipe uma única vez e avalia todas as
+    Busca apenas os integrantes da equipe (filtro por team_id) e avalia todas as
     células em memória. Retorna {(dia, slot): [{"id", "name"}, ...]}.
     """
     cells = list(cells)
     if not cells:
         return {}
-    members = {m.id: m for m in get_members(ws.id)}
     team_members = get_team_members(team_id)
+    member_ids = {tm.member_id for tm in team_members}
+    # Busca apenas os membros que são integrantes da equipe
+    members = {m.id: m for m in get_members(ws.id) if m.id in member_ids}
     if busy is None:
         busy = _busy_por_membro(members)
     out: dict = {}
