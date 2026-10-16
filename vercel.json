@@ -5,6 +5,12 @@
       "use": "@vercel/python"
     }
   ],
+  "regions": ["gru1"],
+  "functions": {
+    "main.py": {
+      "maxDuration": 15
+    }
+  },
   "routes": [
     {
       "src": "/(.*)",
