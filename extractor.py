@@ -84,7 +84,7 @@ def extrair_de_pdf_bytes(content: bytes):
 
 
 def _label_re(palavra: str) -> str:
-    return r'[ -]*'.join(re.escape(c) + r'\s*' for c in palavra)
+    return r'[\s-]*'.join(re.escape(c) for c in palavra) + r'[\s-]*'
 
 
 CURSO_LABEL = _label_re("Curso")
@@ -97,13 +97,14 @@ POS_CURSO = (
 
 def _capturar_campos(fonte: str):
     nome = curso = ""
-    for linha in fonte.split('\n'):
+    for raw_linha in fonte.split('\n'):
+        linha = raw_linha[:2000]
         if not nome:
-            m = re.search(r'(?:Discente|N\s*o\s*m\s*e)\s*:\s*(.+?)(?=' + CURSO_LABEL + r'|\s*$)', linha, re.I)
+            m = re.search(r'(?:Discente|N[\s-]*o[\s-]*m[\s-]*e)\s*:\s*(.+?)(?=' + CURSO_LABEL + r'|\s*$)', linha, re.I)
             if m:
                 nome = m.group(1).strip()
         if not curso:
-            m = re.search(r'C\s*u\s*r\s*s\s*o\s*:\s*(.+?)(?=' + POS_CURSO + r'|\s*$)', linha, re.I)
+            m = re.search(r'C[\s-]*u[\s-]*r[\s-]*s[\s-]*o\s*:\s*(.+?)(?=' + POS_CURSO + r'|\s*$)', linha, re.I)
             if m:
                 curso = m.group(1).strip()
     return nome, curso
