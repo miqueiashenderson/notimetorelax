@@ -39,15 +39,22 @@ SIGAA_TURNO_MAP = {
 def _raw_texto(reader: PdfReader) -> str:
     """Texto cru dos fluxos Tj (visitor). Preserva os espaços reais entre
     palavras; o modo layout insere espaços extras em campos com letter-spacing."""
+    if not reader.pages:
+        return ""
     buf: list[str] = []
 
     def visit(text, cm, tm, font_dict, font_size):
         if text:
             buf.append(text)
 
-    for pag in reader.pages:
-        pag.extract_text(visitor_text=visit)
-    return "".join(buf)
+    # Discente e curso ficam no cabeçalho da primeira página
+    reader.pages[0].extract_text(visitor_text=visit)
+    raw = "".join(buf)
+    if not any(k in raw.lower() for k in ("discente", "nome")):
+        for pag in reader.pages[1:]:
+            pag.extract_text(visitor_text=visit)
+        raw = "".join(buf)
+    return raw
 
 
 def extrair_texto(path: str) -> str:
