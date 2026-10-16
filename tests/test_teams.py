@@ -177,6 +177,59 @@ class TestSchedule:
         assert get_schedule_entry(e.id) is None
         assert delete_schedule_entry(e.id, workspace.id) is False
 
+    def test_add_entries_bulk(self, session, workspace):
+        from database import add_schedule_entries_bulk
+
+        t = create_team(workspace.id, "A")
+        cells = [[0, 0], [0, 1], [1, 2], [3, 4]]
+        criadas = add_schedule_entries_bulk(
+            workspace.id, t.id, cells, task="Bulk", status="planejado"
+        )
+        assert len(criadas) == 4
+        assert all(c["id"] is not None for c in criadas)
+        assert {(c["day"], c["slot"]) for c in criadas} == {(d, s) for d, s in cells}
+        salvas = get_schedule_entries(workspace.id)
+        assert len(salvas) == 4
+        assert all(e.task == "Bulk" for e in salvas)
+
+    def test_add_entries_bulk_empty(self, session, workspace):
+        from database import add_schedule_entries_bulk
+
+        t = create_team(workspace.id, "A")
+        assert add_schedule_entries_bulk(workspace.id, t.id, []) == []
+        assert get_schedule_entries(workspace.id) == []
+
+    def test_delete_entries_bulk(self, session, workspace):
+        from database import add_schedule_entries_bulk, delete_schedule_entries_bulk
+
+        t = create_team(workspace.id, "A")
+        criadas = add_schedule_entries_bulk(workspace.id, t.id, [[0, 0], [0, 1], [1, 2]])
+        ids = [c["id"] for c in criadas]
+        assert delete_schedule_entries_bulk(ids[:2], workspace.id) == 2
+        restantes = get_schedule_entries(workspace.id)
+        assert len(restantes) == 1
+        assert restantes[0].id == ids[2]
+
+    def test_delete_entries_bulk_ignores_other_workspace(self, session, workspace):
+        from database import add_schedule_entries_bulk, delete_schedule_entries_bulk
+
+        outro = Workspace(slug="outro2", name="Outro")
+        session.add(outro)
+        session.commit()
+        t = create_team(workspace.id, "A")
+        criadas = add_schedule_entries_bulk(workspace.id, t.id, [[0, 0]])
+        # Tenta apagar passando o workspace errado: nada é removido.
+        assert delete_schedule_entries_bulk([criadas[0]["id"]], outro.id) == 0
+        assert len(get_schedule_entries(workspace.id)) == 1
+
+    def test_schedule_index_exists(self, session, workspace):
+        from sqlalchemy import inspect
+
+        from database import get_engine
+
+        nomes = {i["name"] for i in inspect(get_engine()).get_indexes("schedule_entries")}
+        assert "ix_schedule_entries_ws_team_day_slot" in nomes
+
 
 class TestWorkspaceCleanup:
     def test_delete_workspace_removes_teams_and_entries(self, session, workspace):

@@ -394,6 +394,21 @@ class TestScheduleBulkAPI:
         assert resp2.status_code == 200
         assert resp2.json()["created"] == 2
 
+    def test_bulk_entries_carry_conflicts(self, client, workspace, session):
+        """`entries` devolve os conflitos por célula (contrato p/ atualizar local)."""
+        owner, tid, leader_user, m = self._setup(client, workspace, session, busy=[[1, 1]])
+        resp = client.post(
+            f"/api/workspace/{workspace.slug}/schedule/bulk",
+            json={"team_id": tid, "cells": [[1, 1], [1, 2]], "force": True},
+        )
+        assert resp.status_code == 200
+        entries = {(e["day"], e["slot"]): e for e in resp.json()["entries"]}
+        assert len(entries) == 2
+        assert entries[(1, 1)]["conflicts"][0]["id"] == m.id
+        assert entries[(1, 2)]["conflicts"] == []
+        # a lista agregada também reflete o conflito
+        assert resp.json()["conflicts"][0]["id"] == m.id
+
     def test_bulk_invalid_cells_filtered(self, client, workspace, session):
         owner, tid, leader_user, m = self._setup(client, workspace, session)
         resp = client.post(

@@ -1,7 +1,7 @@
 import json, os, re, hashlib, hmac, secrets, unicodedata, socket
 from urllib.parse import urlparse, urlunparse
 from dotenv import load_dotenv
-from sqlalchemy import create_engine, ForeignKey, UniqueConstraint, text
+from sqlalchemy import create_engine, ForeignKey, UniqueConstraint, Index, and_, insert, or_, text
 from sqlalchemy.pool import NullPool, QueuePool
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, Session
 from datetime import datetime, timezone
@@ -228,6 +228,11 @@ class ScheduleEntry(Base):
     """Uma atribuição de trabalho na escala semanal: equipe x (dia, slot)."""
 
     __tablename__ = "schedule_entries"
+    # Índice composto: acelera a checagem de duplicados por (workspace, equipe)
+    # e a listagem da escala por workspace.
+    __table_args__ = (
+        Index("ix_schedule_entries_ws_team_day_slot", "workspace_id", "team_id", "day", "slot"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     workspace_id: Mapped[int] = mapped_column(
@@ -333,6 +338,13 @@ def _migrate(engine):
         with engine.begin() as conn:
             if "owner_id" not in ws_cols:
                 conn.execute(text("ALTER TABLE workspaces ADD COLUMN owner_id INTEGER"))
+
+    if "schedule_entries" in tables:
+        with engine.begin() as conn:
+            conn.execute(text(
+                "CREATE INDEX IF NOT EXISTS ix_schedule_entries_ws_team_day_slot "
+                "ON schedule_entries (workspace_id, team_id, day, slot)"
+            ))
 
 
 def create_workspace(name: str, password: str | None = None, owner_id: int | None = None):
@@ -840,3 +852,72 @@ def delete_schedule_entry(entry_id: int, workspace_id: int):
         sess.delete(e)
         sess.commit()
         return True
+
+
+def add_schedule_entries_bulk(
+    workspace_id: int,
+    team_id: int,
+    cells,
+    task: str = "",
+    status: str = "planejado",
+    created_by_user_id: int | None = None,
+):
+    """Insere várias entradas da escala em UMA ida ao banco (INSERT em lote).
+
+    Recebe `cells` como iterável de pares (dia, slot). Retorna a lista de dicts
+    das entradas criadas (com id), na ordem recebida.
+    """
+    task = _sanitize_texto(task, max_len=200)
+    now = datetime.now(timezone.utc).isoformat()
+    rows = [
+        {
+            "workspace_id": workspace_id,
+            "team_id": team_id,
+            "day": d,
+            "slot": s,
+            "task": task,
+            "status": status,
+            "created_by_user_id": created_by_user_id,
+            "created_at": now,
+            "updated_at": now,
+        }
+        for (d, s) in cells
+    ]
+    if not rows:
+        return []
+    with Session(get_engine()) as sess:
+        # execute() com lista de parâmetros => executemany: UMA ida ao banco,
+        # tanto no SQLite quanto no Postgres (não um INSERT por célula).
+        sess.execute(insert(ScheduleEntry.__table__), rows)
+        sess.commit()
+        # Busca as entradas recém-criadas em UMA query (para devolver os ids).
+        pares = or_(
+            *[and_(ScheduleEntry.day == d, ScheduleEntry.slot == s) for (d, s) in cells]
+        )
+        criadas = (
+            sess.query(ScheduleEntry)
+            .filter(
+                ScheduleEntry.workspace_id == workspace_id,
+                ScheduleEntry.team_id == team_id,
+                pares,
+            )
+            .all()
+        )
+        return [e.to_dict() for e in criadas]
+
+
+def delete_schedule_entries_bulk(entry_ids, workspace_id: int) -> int:
+    """Apaga várias entradas da escala em UMA query (DELETE ... WHERE id IN).
+
+    Retorna quantas linhas foram apagadas."""
+    ids = [int(i) for i in entry_ids]
+    if not ids:
+        return 0
+    with Session(get_engine()) as sess:
+        n = (
+            sess.query(ScheduleEntry)
+            .filter(ScheduleEntry.workspace_id == workspace_id, ScheduleEntry.id.in_(ids))
+            .delete(synchronize_session=False)
+        )
+        sess.commit()
+        return int(n or 0)

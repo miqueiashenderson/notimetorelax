@@ -18,7 +18,8 @@ from database import (
     get_team_members, get_workspace_team_members, add_team_member,
     remove_team_member, set_team_leader, is_team_leader, get_leading_team_ids,
     get_schedule_entries, get_schedule_entry, add_schedule_entry,
-    update_schedule_entry, delete_schedule_entry, SCHEDULE_STATUSES,
+    add_schedule_entries_bulk, update_schedule_entry, delete_schedule_entry,
+    delete_schedule_entries_bulk, SCHEDULE_STATUSES,
 )
 from extractor import extrair_de_pdf_bytes, title_case, SLOTS
 
@@ -275,17 +276,36 @@ def _load_authed_ws(request: Request, slug: str):
     return ws, None
 
 
+def _conflicts_for_cells(ws, team_id: int, cells) -> dict:
+    """Conflitos de VÁRIAS células de uma equipe em uma só passada ao banco.
+
+    Busca os membros e os integrantes da equipe uma única vez e avalia todas as
+    células em memória. Retorna {(dia, slot): [{"id", "name"}, ...]}.
+    """
+    cells = list(cells)
+    if not cells:
+        return {}
+    members = {m.id: m for m in get_members(ws.id)}
+    team_members = get_team_members(team_id)
+    busy = {
+        mid: {(b[0], b[1]) for b in m.get_all_busy()}
+        for mid, m in members.items()
+    }
+    out: dict = {}
+    for (d, s) in cells:
+        key = (d, s)
+        conflitos = []
+        for tm in team_members:
+            m = members.get(tm.member_id)
+            if m and key in busy.get(tm.member_id, set()):
+                conflitos.append({"id": m.id, "name": m.name})
+        out[key] = conflitos
+    return out
+
+
 def _conflicts_for(ws, team_id: int, day: int, slot: int) -> list:
     """Integrantes da equipe ocupados (aula/outro) no dia/slot informado."""
-    members = {m.id: m for m in get_members(ws.id)}
-    out = []
-    for tm in get_team_members(team_id):
-        m = members.get(tm.member_id)
-        if not m:
-            continue
-        if any(b[0] == day and b[1] == slot for b in m.get_all_busy()):
-            out.append({"id": m.id, "name": m.name})
-    return out
+    return _conflicts_for_cells(ws, team_id, [(day, slot)]).get((day, slot), [])
 
 
 def _normalizar_slots(raw) -> list | None:
@@ -1072,9 +1092,11 @@ async def api_add_schedule_bulk(request: Request, slug: str):
     }
     new_cells = sorted(c for c in cells if c not in existing)
 
+    # Conflitos de todas as células em uma só passada ao banco.
+    conflict_map = _conflicts_for_cells(ws, team_id, new_cells)
     conflicts_map: dict[int, dict] = {}
-    for d, s in new_cells:
-        for c in _conflicts_for(ws, team_id, d, s):
+    for conflitos in conflict_map.values():
+        for c in conflitos:
             conflicts_map[c["id"]] = c
     conflicts = list(conflicts_map.values())
     if conflicts and not bool(body.get("force")):
@@ -1088,12 +1110,12 @@ async def api_add_schedule_bulk(request: Request, slug: str):
             status_code=409,
         )
 
-    created = []
-    for d, s in new_cells:
-        entry = add_schedule_entry(
-            ws.id, team_id, d, s, task=task, status=status, created_by_user_id=user_id
-        )
-        created.append(entry.to_dict())
+    # INSERT em lote: uma ida ao banco para todas as células.
+    created = add_schedule_entries_bulk(
+        ws.id, team_id, new_cells, task=task, status=status, created_by_user_id=user_id
+    )
+    for entry in created:
+        entry["conflicts"] = conflict_map.get((entry["day"], entry["slot"]), [])
     return JSONResponse(
         {
             "created": len(created),
@@ -1189,21 +1211,28 @@ async def api_delete_schedule_bulk(request: Request, slug: str):
         return JSONResponse({"erro": "Nenhuma entrada selecionada."}, status_code=400)
 
     entries = {e.id: e for e in get_schedule_entries(ws.id)}
-    deleted, skipped = 0, 0
+    # Permissão resolvida uma vez: dono pode tudo; líder só as equipes que lidera.
+    if user_id and ws.owner_id == user_id:
+        manageable = None  # None => qualquer equipe do workspace
+    else:
+        manageable = set(get_leading_team_ids(ws.id, user_id)) if user_id else set()
+
+    to_delete, seen, skipped = [], set(), 0
     for raw in ids_raw:
         entry_id = _coerce_int(raw)
-        entry = entries.get(entry_id) if entry_id is not None else None
-        if not entry:
+        if entry_id is None or entry_id in seen:
             skipped += 1
             continue
-        team = get_team(entry.team_id)
-        if not _can_manage_team(ws, team, user_id):
+        seen.add(entry_id)
+        entry = entries.get(entry_id)
+        if not entry or (manageable is not None and entry.team_id not in manageable):
             skipped += 1
             continue
-        if delete_schedule_entry(entry.id, ws.id):
-            deleted += 1
-        else:
-            skipped += 1
+        to_delete.append(entry_id)
+
+    # DELETE em lote: uma query para apagar todas as entradas.
+    deleted = delete_schedule_entries_bulk(to_delete, ws.id)
+    skipped += len(to_delete) - deleted
     return JSONResponse({"deleted": deleted, "skipped": skipped})
 
 

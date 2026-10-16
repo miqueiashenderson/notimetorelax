@@ -463,6 +463,18 @@ async function refresh(){
 
 function renderAll(){ renderTeams(); renderFilters(); renderGrid(); }
 
+// Atualizações locais do estado (evitam um GET completo a cada escrita).
+function upsertEntries(novas){
+  if(!Array.isArray(novas) || !novas.length) return;
+  const byId = new Map(SCHEDULE.map(e => [e.id, e]));
+  novas.forEach(e => { if(e && e.id != null) byId.set(e.id, e); });
+  SCHEDULE = [...byId.values()];
+}
+function removeEntries(ids){
+  const s = new Set(ids);
+  SCHEDULE = SCHEDULE.filter(e => !s.has(e.id));
+}
+
 // ─── Equipes ────────────────────────────────────────────────────────────────
 
 function renderTeams(){
@@ -902,7 +914,8 @@ async function eraseCells(cells){
     uiToast((res.data && res.data.erro) || 'Não foi possível apagar.', 'erro');
     return;
   }
-  await refresh();
+  removeEntries(alvo.map(e => e.id));
+  renderGrid();
   uiToast(`${rotulo} apagada${alvo.length === 1 ? '' : 's'}.`);
 }
 
@@ -1029,8 +1042,14 @@ async function saveEntry(){
     uiToast((res.data && res.data.erro) || 'Não foi possível salvar.', 'erro');
     return;
   }
+  // Atualiza só a grade, sem refazer GET(/teams) nem GET(/schedule).
+  if(modalEntryId){
+    if(res.data && res.data.id != null) upsertEntries([res.data]);
+  } else if(res.data && Array.isArray(res.data.entries)){
+    upsertEntries(res.data.entries);
+  }
   closeModal();
-  await refresh();
+  renderGrid();
 }
 
 async function bulkCreate(team_id, task, status, cells, force){
@@ -1048,7 +1067,8 @@ async function bulkCreate(team_id, task, status, cells, force){
     uiToast((res.data && res.data.erro) || 'Não foi possível salvar o bloco.', 'erro');
     return;
   }
-  await refresh();
+  if(res.data && Array.isArray(res.data.entries)) upsertEntries(res.data.entries);
+  renderGrid();
 }
 
 async function deleteEntry(){
@@ -1059,8 +1079,9 @@ async function deleteEntry(){
     uiToast((res.data && res.data.erro) || 'Não foi possível apagar.', 'erro');
     return;
   }
+  removeEntries([modalEntryId]);
   closeModal();
-  await refresh();
+  renderGrid();
   uiToast('Entrada apagada.');
 }
 
