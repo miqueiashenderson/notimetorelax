@@ -61,15 +61,16 @@ _db_ready = False
 
 def _ensure_db():
     global _db_ready
-    if not _db_ready:
-        # Verifica se a tabela workspaces já existe antes de rodar init_db
-        from sqlalchemy import inspect as sa_inspect
-        from database import get_engine
-        engine = get_engine()
-        inspector = sa_inspect(engine)
-        if "workspaces" not in inspector.get_table_names():
-            init_db()
-        _db_ready = True
+    if _db_ready:
+        return
+    # Garante que TODO o schema exista (tabelas novas e colunas/índices de
+    # migração), não apenas a tabela "workspaces". init_db() é idempotente:
+    # create_all() só cria tabelas ausentes e _migrate() só adiciona colunas e
+    # índices faltantes. Verificar apenas "workspaces" pulava a criação de
+    # tabelas novas (ex.: workspace_admins), quebrando a rota da escala em
+    # bancos já existentes. Executa uma vez por processo.
+    init_db()
+    _db_ready = True
 
 
 def _hmac_sig(payload: str) -> str:

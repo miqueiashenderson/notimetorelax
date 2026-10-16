@@ -31,3 +31,24 @@ Este documento registra problemas identificados fora do roteiro ou decisões de 
 - **Correção:** Removidas as chaves legadas `builds` e `routes`. O runtime Python do Vercel detecta automaticamente aplicações FastAPI (arquivo `main.py` com variável `app` + `fastapi` em `requirements.txt`) e roteia todas as requisições para a aplicação. Mantidas `regions: ["gru1"]` e `functions.main.py.maxDuration: 15`.
 - **Referência:** https://vercel.com/docs/errors/error-list#conflicting-functions-and-builds-configuration
 - **Alternativa conservadora:** caso a detecção automática do framework não ocorra, restaurar `builds` + `routes` e remover apenas `functions`, configurando região/duração pela interface do projeto no dashboard.
+
+## D5 (correção) — `_ensure_db` pulava migrações e tabelas novas
+- **Sintoma:** Ao abrir `/workspace/{slug}/escala` em produção (Supabase) aparecia a tela "Erro interno".
+- **Causa raiz:** A otimização do D5 (`_ensure_db` só rodava `init_db()` se a tabela `workspaces` não existisse) impedia a criação de tabelas introduzidas depois. Com o recurso de co-donos, a tabela `workspace_admins` passou a ser consultada por `_admins_payload` na rota da escala; em bancos já existentes ela nunca era criada → `relation "workspace_admins" does not exist` → 500. Os testes não detectavam porque o `conftest.py` cria todas as tabelas (`Base.metadata.create_all`) antes da suíte.
+- **Correção:** `_ensure_db()` volta a chamar `init_db()` uma vez por processo. A operação é idempotente (`create_all` só cria tabelas ausentes; `_migrate` só adiciona colunas/índices faltantes) e em bancos atualizados executa apenas introspecção.
+- **Teste de regressão:** `tests/test_ensure_db.py` simula um banco legado sem `workspace_admins` e garante que a tabela seja criada.
+- **Correção manual imediata (Supabase SQL Editor):**
+```sql
+CREATE TABLE workspace_admins (
+  id SERIAL NOT NULL,
+  workspace_id INTEGER NOT NULL,
+  user_id INTEGER NOT NULL,
+  created_at VARCHAR NOT NULL,
+  PRIMARY KEY (id),
+  CONSTRAINT uq_workspace_admin UNIQUE (workspace_id, user_id),
+  FOREIGN KEY(workspace_id) REFERENCES workspaces (id) ON DELETE CASCADE,
+  FOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE
+);
+CREATE INDEX ix_workspace_admins_user_id ON workspace_admins (user_id);
+CREATE INDEX ix_workspace_admins_workspace_id ON workspace_admins (workspace_id);
+```
