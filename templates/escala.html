@@ -471,7 +471,7 @@ async function refresh(){
   renderAll();
 }
 
-function renderAll(){ renderTeams(); renderFilters(); renderGrid(); }
+function renderAll(){ renderTeams(); renderFilters(); renderGrid(); renderAdmins(); }
 
 // Atualizações locais do estado (evitam um GET completo a cada escrita).
 function upsertEntries(novas){

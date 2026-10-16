@@ -52,3 +52,10 @@ CREATE TABLE workspace_admins (
 CREATE INDEX ix_workspace_admins_user_id ON workspace_admins (user_id);
 CREATE INDEX ix_workspace_admins_workspace_id ON workspace_admins (workspace_id);
 ```
+
+## Co-donos — painel não renderizava (dropdown de candidatos vazio)
+- **Sintoma:** Na escala, a seção "Administradores do workspace" não mostrava os candidatos a co-dono (dropdown vazio / sem opções), impossibilitando promover alguém.
+- **Causa raiz:** `renderAll()` em `templates/escala.html` chamava apenas `renderTeams()`, `renderFilters()` e `renderGrid()`. A função `renderAdmins()` (que monta os chips e popula o `<select id="adminPick">`) só era invocada dentro de `promoteAdmin()`/`demoteAdmin()` — nunca na carga da página. Assim o painel nunca era preenchido.
+- **Correção:** `renderAll()` passa a chamar `renderAdmins()`.
+- **Teste de regressão:** `tests/test_escala_template.py` verifica que `renderAll()` chama `renderAdmins()` e que os elementos do painel existem no template.
+- **Observação:** o dropdown lista apenas integrantes **com conta vinculada** (`user_id` não nulo), ou seja, que já entraram com Google/upload no workspace. Integrantes adicionados só por nome não aparecem — comportamento intencional.
