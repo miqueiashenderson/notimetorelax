@@ -104,6 +104,38 @@ class User(Base):
         }
 
 
+class WorkspaceAdmin(Base):
+    """Co-dono (administrador) de um workspace.
+
+    O criador (`Workspace.owner_id`) é administrador implícito; esta tabela
+    guarda os demais administradores. Co-donos podem tudo que o criador pode,
+    exceto apagar o workspace e mexer na lista de co-donos.
+    """
+
+    __tablename__ = "workspace_admins"
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "user_id", name="uq_workspace_admin"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    workspace_id: Mapped[int] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="CASCADE"), index=True, nullable=False
+    )
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False
+    )
+    created_at: Mapped[str] = mapped_column(
+        default=lambda: datetime.now(timezone.utc).isoformat()
+    )
+
+    def to_dict(self):
+        return {
+            "workspace_id": self.workspace_id,
+            "user_id": self.user_id,
+            "created_at": self.created_at,
+        }
+
+
 class Member(Base):
     __tablename__ = "members"
 
@@ -381,6 +413,7 @@ def delete_workspace(slug: str):
             )
         sess.query(Team).filter_by(workspace_id=ws.id).delete()
         sess.query(Member).filter_by(workspace_id=ws.id).delete()
+        sess.query(WorkspaceAdmin).filter_by(workspace_id=ws.id).delete()
         sess.delete(ws)
         sess.commit()
         return True
@@ -406,6 +439,60 @@ def get_members(workspace_id: int):
         return list(
             sess.query(Member).filter_by(workspace_id=workspace_id).all()
         )
+
+
+def get_workspace_admin_user_ids(workspace_id: int) -> list[int]:
+    """IDs de usuário dos co-donos (não inclui o criador)."""
+    with Session(get_engine()) as sess:
+        rows = (
+            sess.query(WorkspaceAdmin.user_id)
+            .filter_by(workspace_id=workspace_id)
+            .order_by(WorkspaceAdmin.id)
+            .all()
+        )
+        return [r[0] for r in rows]
+
+
+def is_workspace_admin(workspace_id: int, user_id: int) -> bool:
+    """True se o usuário é co-dono (não considera o criador)."""
+    if not user_id:
+        return False
+    with Session(get_engine()) as sess:
+        return (
+            sess.query(WorkspaceAdmin.id)
+            .filter_by(workspace_id=workspace_id, user_id=user_id)
+            .first()
+            is not None
+        )
+
+
+def add_workspace_admin(workspace_id: int, user_id: int) -> bool:
+    """Promove o usuário a co-dono. True se adicionou, False se já era co-dono."""
+    if not user_id:
+        return False
+    with Session(get_engine()) as sess:
+        existe = (
+            sess.query(WorkspaceAdmin.id)
+            .filter_by(workspace_id=workspace_id, user_id=user_id)
+            .first()
+        )
+        if existe:
+            return False
+        sess.add(WorkspaceAdmin(workspace_id=workspace_id, user_id=user_id))
+        sess.commit()
+        return True
+
+
+def remove_workspace_admin(workspace_id: int, user_id: int) -> bool:
+    """Remove o cargo de co-dono. True se removeu algo."""
+    with Session(get_engine()) as sess:
+        n = (
+            sess.query(WorkspaceAdmin)
+            .filter_by(workspace_id=workspace_id, user_id=user_id)
+            .delete()
+        )
+        sess.commit()
+        return bool(n)
 
 
 def get_member(member_id: int):

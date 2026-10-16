@@ -7,8 +7,10 @@ from database import (
     get_workspace_team_members, remove_team_member, set_team_leader,
     is_team_leader, get_leading_team_ids, get_schedule_entries,
     get_schedule_entry, add_schedule_entry, update_schedule_entry,
-    delete_schedule_entry, delete_workspace, get_workspace,
+    delete_schedule_entry, delete_workspace, get_workspace, create_workspace,
     get_or_create_user, Team, TeamMember, ScheduleEntry, Member, Workspace,
+    get_workspace_admin_user_ids, is_workspace_admin, add_workspace_admin,
+    remove_workspace_admin,
 )
 
 
@@ -241,3 +243,54 @@ class TestWorkspaceCleanup:
         assert get_workspace(workspace.slug) is None
         assert get_teams(workspace.id) == []
         assert get_schedule_entries(workspace.id) == []
+
+    def test_delete_workspace_removes_admins(self, session, workspace):
+        u1 = get_or_create_user("sub-a", "a@x.com", "A")
+        u2 = get_or_create_user("sub-b", "b@x.com", "B")
+        add_workspace_admin(workspace.id, u1.id)
+        add_workspace_admin(workspace.id, u2.id)
+        assert len(get_workspace_admin_user_ids(workspace.id)) == 2
+        assert delete_workspace(workspace.slug) is True
+        assert get_workspace_admin_user_ids(workspace.id) == []
+
+
+class TestWorkspaceAdminCRUD:
+    def test_add_and_list_admins(self, session, workspace):
+        u1 = get_or_create_user("sub-a", "a@x.com", "A")
+        assert add_workspace_admin(workspace.id, u1.id) is True
+        assert get_workspace_admin_user_ids(workspace.id) == [u1.id]
+        # adicionar de novo é no-op
+        assert add_workspace_admin(workspace.id, u1.id) is False
+        assert get_workspace_admin_user_ids(workspace.id) == [u1.id]
+
+    def test_is_workspace_admin(self, session, workspace):
+        u1 = get_or_create_user("sub-a", "a@x.com", "A")
+        u2 = get_or_create_user("sub-b", "b@x.com", "B")
+        assert is_workspace_admin(workspace.id, u1.id) is False
+        add_workspace_admin(workspace.id, u1.id)
+        assert is_workspace_admin(workspace.id, u1.id) is True
+        assert is_workspace_admin(workspace.id, u2.id) is False
+        # usuário sem conta nunca é admin
+        assert is_workspace_admin(workspace.id, None) is False
+
+    def test_admin_e_isolado_por_workspace(self, session, workspace):
+        u1 = get_or_create_user("sub-a", "a@x.com", "A")
+        other = create_workspace("Outro", None, owner_id=None)
+        add_workspace_admin(other.id, u1.id)
+        assert is_workspace_admin(other.id, u1.id) is True
+        assert is_workspace_admin(workspace.id, u1.id) is False
+
+    def test_remove_workspace_admin(self, session, workspace):
+        u1 = get_or_create_user("sub-a", "a@x.com", "A")
+        add_workspace_admin(workspace.id, u1.id)
+        assert remove_workspace_admin(workspace.id, u1.id) is True
+        assert get_workspace_admin_user_ids(workspace.id) == []
+        assert is_workspace_admin(workspace.id, u1.id) is False
+        # remover de novo é no-op
+        assert remove_workspace_admin(workspace.id, u1.id) is False
+
+    def test_admin_unique_constraint(self, session, workspace):
+        u1 = get_or_create_user("sub-a", "a@x.com", "A")
+        add_workspace_admin(workspace.id, u1.id)
+        add_workspace_admin(workspace.id, u1.id)
+        assert get_workspace_admin_user_ids(workspace.id) == [u1.id]
