@@ -647,6 +647,20 @@ function renderGrid(){
   CELL_MAP.clear();
   table.innerHTML = '';
   const days = getDays();
+  const canManageAny = manageableTeams().length > 0;
+
+  const porCelula = new Map();
+  for(let i = 0; i < SCHEDULE.length; i++){
+    const e = SCHEDULE[i];
+    if(!selectedTeams.has(e.team_id)) continue;
+    const k = `${e.day},${e.slot}`;
+    let list = porCelula.get(k);
+    if(!list){
+      list = [];
+      porCelula.set(k, list);
+    }
+    list.push(e);
+  }
 
   const thead = document.createElement('tr');
   const th0 = document.createElement('th');
@@ -675,9 +689,9 @@ function renderGrid(){
       td.dataset.d = String(d);
       td.dataset.s = String(s);
       CELL_MAP.set(`${d},${s}`, td);
-      const entries = SCHEDULE.filter(e => e.day === d && e.slot === s && selectedTeams.has(e.team_id));
+      const entries = porCelula.get(`${d},${s}`) || [];
 
-      if(manageableTeams().length){
+      if(canManageAny){
         td.classList.add('addable');
         td.title = 'Clique para adicionar, ou arraste para selecionar vários horários';
         td.addEventListener('pointerdown', (ev) => onCellPointerDown(ev, d, s));
@@ -698,7 +712,7 @@ function renderGrid(){
 
   const hint = document.getElementById('gridHint');
   if(hint){
-    if(!manageableTeams().length){
+    if(!canManageAny){
       hint.textContent = 'Somente leitura.';
     } else if(eraseMode){
       hint.textContent = '🗑 Modo apagar: arraste sobre os blocos para apagá-los.';
