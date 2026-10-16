@@ -721,6 +721,9 @@ async def api_upload(
     if not file.filename or not file.filename.lower().endswith(".pdf"):
         return JSONResponse({"erro": "Apenas arquivos PDF são aceitos."}, status_code=400)
 
+    if file.size and file.size > 10 * 1024 * 1024:
+        return JSONResponse({"erro": "Arquivo muito grande. Máximo 10 MB."}, status_code=400)
+
     try:
         content = await file.read()
         if len(content) > 10 * 1024 * 1024:
@@ -747,7 +750,8 @@ async def api_upload(
 
         return JSONResponse(member.to_dict())
 
-    except Exception as e:
+    except Exception:
+        logger.exception("Falha no upload do PDF")
         return JSONResponse({"erro": "Erro interno ao processar o arquivo."}, status_code=500)
 
 
