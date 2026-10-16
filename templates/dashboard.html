@@ -322,9 +322,26 @@
     background:var(--yellow);
     border:1px solid rgba(0,0,0,.6);
   }
+  .removed-marker{
+    position:absolute;
+    top:3px;
+    right:3px;
+    width:13px;
+    height:13px;
+    border-radius:50%;
+    background:rgba(255,107,107,.95);
+    border:1px solid rgba(0,0,0,.6);
+    color:#1a1a1a;
+    font-size:10px;
+    font-weight:700;
+    line-height:13px;
+    text-align:center;
+  }
+  .cell.editing.removed-editing{
+    box-shadow:inset 0 0 0 2px rgba(255,107,107,.85);
+  }
   .cell.editing{border-color:var(--yellow);}
   .cell.editing:hover{outline-color:var(--yellow);}
-  .cell.locked{cursor:not-allowed;}
 
   .editbar .controls-bar{
     display:flex;
@@ -512,7 +529,7 @@
     <div class="controls-bar">
       <div>
         <h2><span style="color:var(--cyan);">Editar meus horários</span> — editando você mesmo</h2>
-        <p><b id="editBarWho" style="color:var(--cyan);"></b> — é <b>seu</b> horário, não o de outra pessoa. Clique nas células para marcar ou desmarcar quando você fica ocupado por outro motivo (projeto, pesquisa, trabalho). Os horários de aula vindos do seu PDF não podem ser alterados aqui.</p>
+        <p><b id="editBarWho" style="color:var(--cyan);"></b> — é <b>seu</b> horário, não o de outra pessoa. Clique numa célula <b>livre</b> para marcar/desmarcar quando você fica ocupado por outro motivo (projeto, pesquisa, trabalho) e clique numa <b>aula</b> para apagá-la ou restaurá-la (ex.: o professor mudou o horário e isso não aparece no PDF).</p>
       </div>
       <div style="display:flex;gap:8px;align-items:center;">
         <button class="btn btn-primary" id="btnSaveExtra">Salvar horários</button>
@@ -679,6 +696,7 @@ let selectedSlotData = null;
 let myMember = null;
 let editing = false;
 let draftExtra = new Set();
+let draftRemoved = new Set();
 
 function getDays(){
   return showWeekend ? ALL_DAYS : ["Seg", "Ter", "Qua", "Qui", "Sex"];
@@ -690,6 +708,10 @@ function isClassBusy(m, d, s){
 
 function isExtraBusy(m, d, s){
   return (m.extra_busy || []).some(b => b[0]===d && b[1]===s);
+}
+
+function isRemovedClass(m, d, s){
+  return (m.removed_busy || []).some(b => b[0]===d && b[1]===s);
 }
 
 function isBusy(m, d, s){
@@ -899,7 +921,10 @@ function renderGrid(){
       if (editing) {
         td.classList.add('editing');
         const key = d + ',' + s;
-        if (myMember && isClassBusy(myMember, d, s)) td.classList.add('locked');
+        if (draftRemoved.has(key)) {
+          td.classList.add('removed-editing');
+          td.innerHTML += '<div class="removed-marker">×</div>';
+        }
         if (draftExtra.has(key)) td.innerHTML += '<div class="extra-marker"></div>';
       }
 
@@ -911,9 +936,17 @@ function renderGrid(){
       // Clique para ação rápida / edição de horários extras
       td.onclick = ()=>{
         if (editing && myMember) {
-          if (isClassBusy(myMember, d, s)) return;
           const key = d + ',' + s;
-          draftExtra.has(key) ? draftExtra.delete(key) : draftExtra.add(key);
+          if (draftRemoved.has(key)) {
+            // aula apagada: clicar de novo restaura
+            draftRemoved.delete(key);
+          } else if (isClassBusy(myMember, d, s)) {
+            // aula do PDF/SIGAA: clicar apaga o bloco
+            draftRemoved.add(key);
+          } else {
+            // célula livre: alterna compromisso extra
+            draftExtra.has(key) ? draftExtra.delete(key) : draftExtra.add(key);
+          }
           renderGrid();
           return;
         }
@@ -1007,6 +1040,7 @@ function startEdit(){
   const who = document.getElementById('editBarWho');
   if(who) who.textContent = myMember.name + ' (você)';
   draftExtra = new Set((myMember.extra_busy || []).map(b => b[0] + ',' + b[1]));
+  draftRemoved = new Set((myMember.removed_busy || []).map(b => b[0] + ',' + b[1]));
   const btnSave = document.getElementById('btnSaveExtra');
   if(btnSave) btnSave.disabled = false;
   showEditBar();
@@ -1016,6 +1050,7 @@ function startEdit(){
 function endEdit(){
   editing = false;
   draftExtra = new Set();
+  draftRemoved = new Set();
   const btnSave = document.getElementById('btnSaveExtra');
   if(btnSave) btnSave.disabled = false;
   hideEditBar();
@@ -1025,12 +1060,13 @@ function endEdit(){
 function saveExtraBusy(){
   if(!myMember) return;
   const arr = [...draftExtra].map(key => key.split(',').map(Number));
+  const removed = [...draftRemoved].map(key => key.split(',').map(Number));
   const btnEl = document.getElementById('btnSaveExtra');
   if(btnEl) btnEl.disabled = true;
-  fetch(`/api/workspace/{{ workspace.slug }}/members/${myMember.id}/extra-busy`, {
+  fetch(`/api/workspace/{{ workspace.slug }}/members/${myMember.id}/busy`, {
     method:'PATCH',
     headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({ extra_busy: arr })
+    body: JSON.stringify({ extra_busy: arr, removed_busy: removed })
   })
   .then(r => r.json())
   .then(data => {
@@ -1042,8 +1078,14 @@ function saveExtraBusy(){
     const idx = MEMBERS.findIndex(m => m.id === myMember.id);
     if(idx >= 0){
       MEMBERS[idx].extra_busy = data.extra_busy || [];
+      MEMBERS[idx].busy = data.busy || [];
+      MEMBERS[idx].removed_busy = data.removed_busy || [];
+      if(typeof data.total === 'number') MEMBERS[idx].total = data.total;
       myMember = MEMBERS[idx];
     }
+    showWeekend = MEMBERS.some(m => (m.busy || []).concat(m.extra_busy || []).some(b => b[0] === 5 || b[0] === 6));
+    const btnToggleWeekend = document.getElementById('btnToggleWeekend');
+    if(btnToggleWeekend) btnToggleWeekend.classList.toggle('active', showWeekend);
     endEdit();
     renderMembers();
   })
@@ -1080,7 +1122,7 @@ const btnSaveExtra = document.getElementById('btnSaveExtra');
 const btnCancelEdit = document.getElementById('btnCancelEdit');
 if(btnEditExtra){
   btnEditExtra.style.display = myMember ? 'inline-flex' : 'none';
-  btnEditExtra.title = myMember ? 'Marque horários em que você está ocupado por outro motivo' : '';
+  btnEditExtra.title = myMember ? 'Marque horários em que você está ocupado por outro motivo ou apague aulas que mudaram de horário' : '';
   btnEditExtra.addEventListener('click', startEdit);
 }
 if(btnSaveExtra) btnSaveExtra.addEventListener('click', saveExtraBusy);

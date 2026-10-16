@@ -3,7 +3,8 @@ from sqlalchemy import text
 from database import (
     init_db, create_workspace, get_workspace, get_members, get_member,
     add_member, remove_member, hash_password, check_password,
-    slugify, get_or_create_user, get_user, update_extra_busy, Workspace, Member,
+    slugify, get_or_create_user, get_user, update_extra_busy, update_own_busy,
+    Workspace, Member,
 )
 
 
@@ -209,3 +210,56 @@ class TestExtraBusy:
         assert m2.id == m.id
         assert m2.user_id == u1.id
         assert m2.get_busy() == [[1, 1]]
+
+
+class TestRemovedBusy:
+    def test_get_busy_filtra_removidos(self, session, workspace):
+        u = get_or_create_user("sub-ana", "ana@x.com", "Ana")
+        m, _ = add_member(workspace.id, "Ana", "CC", [[0, 0], [1, 1], [2, 2]], user_id=u.id)
+        assert m.get_busy() == [[0, 0], [1, 1], [2, 2]]
+        assert m.get_removed_busy() == []
+
+        res = update_own_busy(m.id, [[1, 1]], [], workspace_id=workspace.id, owner_user_id=u.id)
+        assert res is not None and res is not False
+        assert res["busy"] == [[0, 0], [2, 2]]
+        assert res["removed_busy"] == [[1, 1]]
+        assert res["extra_busy"] == []
+        assert res["total"] == 2
+
+        m2 = get_member(m.id)
+        assert m2.get_busy() == [[0, 0], [2, 2]]
+        assert m2.get_removed_busy() == [[1, 1]]
+        assert m2.get_all_busy() == [[0, 0], [2, 2]]
+        assert m2.to_dict()["removed_busy"] == [[1, 1]]
+
+    def test_removed_e_extra_sao_independentes(self, session, workspace):
+        u = get_or_create_user("sub-ana", "ana@x.com", "Ana")
+        m, _ = add_member(workspace.id, "Ana", "CC", [[0, 0]], user_id=u.id)
+        update_own_busy(m.id, [[0, 0]], [[3, 3]], workspace_id=workspace.id, owner_user_id=u.id)
+        m2 = get_member(m.id)
+        assert m2.get_busy() == []
+        assert m2.get_extra_busy() == [[3, 3]]
+        assert m2.get_all_busy() == [[3, 3]]
+        assert m2.to_dict()["total"] == 1
+
+    def test_update_own_busy_not_owner(self, session, workspace):
+        u1 = get_or_create_user("sub-ana", "ana@x.com", "Ana")
+        u2 = get_or_create_user("sub-bob", "bob@x.com", "Bob")
+        m, _ = add_member(workspace.id, "Ana", "CC", [[0, 0]], user_id=u1.id)
+        res = update_own_busy(m.id, [[0, 0]], [], workspace_id=workspace.id, owner_user_id=u2.id)
+        assert res is False
+
+    def test_update_own_busy_nonexistent(self, session, workspace):
+        u = get_or_create_user("sub-ana", "ana@x.com", "Ana")
+        assert update_own_busy(9999, [], [], workspace_id=workspace.id, owner_user_id=u.id) is None
+
+    def test_reupload_force_reseta_removidos(self, session, workspace):
+        u = get_or_create_user("sub-ana", "ana@x.com", "Ana")
+        m, _ = add_member(workspace.id, "Ana", "CC", [[0, 0], [1, 1]], user_id=u.id)
+        update_own_busy(m.id, [[0, 0]], [], workspace_id=workspace.id, owner_user_id=u.id)
+        assert get_member(m.id).get_busy() == [[1, 1]]
+
+        m2, erro = add_member(workspace.id, "Ana", "CC", [[2, 2]], force=True, user_id=u.id)
+        assert erro is None
+        assert m2.get_busy() == [[2, 2]]
+        assert m2.get_removed_busy() == []

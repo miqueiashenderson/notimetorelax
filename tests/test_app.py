@@ -503,3 +503,93 @@ class TestExtraBusyAPI:
         )
         assert resp.status_code == 200
         assert resp.json()["user_id"] is not None
+
+
+class TestBusyAPI:
+    def test_update_busy_removes_class(self, client, workspace):
+        user = _login(client, "sub-ana", "ana@x.com", "Ana")
+        member, _ = add_member(
+            workspace.id, "Ana", "CC", [[0, 1], [2, 3]], user_id=user.id
+        )
+        resp = client.patch(
+            f"/api/workspace/{workspace.slug}/members/{member.id}/busy",
+            json={"removed_busy": [[0, 1]], "extra_busy": []},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["busy"] == [[2, 3]]
+        assert data["removed_busy"] == [[0, 1]]
+        assert data["extra_busy"] == []
+
+    def test_update_busy_filters_invalid_slots(self, client, workspace):
+        user = _login(client, "sub-ana", "ana@x.com", "Ana")
+        member, _ = add_member(workspace.id, "Ana", "CC", [[0, 0]], user_id=user.id)
+        resp = client.patch(
+            f"/api/workspace/{workspace.slug}/members/{member.id}/busy",
+            json={"removed_busy": [[0, 0], "x", [1, "a"], [9, 0]], "extra_busy": [[1, 1]]},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["removed_busy"] == [[0, 0]]
+        assert data["extra_busy"] == [[1, 1]]
+        assert data["busy"] == []
+
+    def test_update_busy_parcial_mantem_outro_campo(self, client, workspace):
+        user = _login(client, "sub-ana", "ana@x.com", "Ana")
+        member, _ = add_member(workspace.id, "Ana", "CC", [[0, 0]], user_id=user.id)
+        client.patch(
+            f"/api/workspace/{workspace.slug}/members/{member.id}/busy",
+            json={"extra_busy": [[5, 5]]},
+        )
+        resp = client.patch(
+            f"/api/workspace/{workspace.slug}/members/{member.id}/busy",
+            json={"removed_busy": [[0, 0]]},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["extra_busy"] == [[5, 5]]
+        assert data["removed_busy"] == [[0, 0]]
+        assert data["busy"] == []
+
+    def test_update_busy_not_owner(self, client, workspace):
+        user = _login(client, "sub-ana", "ana@x.com", "Ana")
+        member, _ = add_member(workspace.id, "Ana", "CC", [], user_id=user.id)
+        _login(client, "sub-bob", "bob@x.com", "Bob")
+        resp = client.patch(
+            f"/api/workspace/{workspace.slug}/members/{member.id}/busy",
+            json={"removed_busy": [[0, 0]]},
+        )
+        assert resp.status_code == 403
+
+    def test_update_busy_requires_login(self, client, workspace, members):
+        resp = client.patch(
+            f"/api/workspace/{workspace.slug}/members/{members[0].id}/busy",
+            json={"removed_busy": [[0, 0]]},
+        )
+        assert resp.status_code == 401
+
+    def test_update_busy_invalid_payload(self, client, workspace):
+        user = _login(client, "sub-ana", "ana@x.com", "Ana")
+        member, _ = add_member(workspace.id, "Ana", "CC", [], user_id=user.id)
+        resp = client.patch(
+            f"/api/workspace/{workspace.slug}/members/{member.id}/busy",
+            json={"removed_busy": "x"},
+        )
+        assert resp.status_code == 400
+
+    def test_update_busy_empty_payload(self, client, workspace):
+        user = _login(client, "sub-ana", "ana@x.com", "Ana")
+        member, _ = add_member(workspace.id, "Ana", "CC", [], user_id=user.id)
+        resp = client.patch(
+            f"/api/workspace/{workspace.slug}/members/{member.id}/busy",
+            json={},
+        )
+        assert resp.status_code == 400
+
+    def test_update_busy_nonexistent_member(self, client, workspace):
+        _login(client, "sub-ana", "ana@x.com", "Ana")
+        resp = client.patch(
+            f"/api/workspace/{workspace.slug}/members/9999/busy",
+            json={"removed_busy": []},
+        )
+        assert resp.status_code == 404
