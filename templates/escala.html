@@ -644,6 +644,7 @@ function renderFilters(){
 function renderGrid(){
   const table = document.getElementById('schedGrid');
   if(!table) return;
+  CELL_MAP.clear();
   table.innerHTML = '';
   const days = getDays();
 
@@ -673,6 +674,7 @@ function renderGrid(){
       td.className = 'cell';
       td.dataset.d = String(d);
       td.dataset.s = String(s);
+      CELL_MAP.set(`${d},${s}`, td);
       const entries = SCHEDULE.filter(e => e.day === d && e.slot === s && selectedTeams.has(e.team_id));
 
       if(manageableTeams().length){
@@ -755,6 +757,11 @@ function buildChip(e){
 
 let dragState = null;
 const dragHintEl = document.getElementById('dragHint');
+const CELL_MAP = new Map();
+let lastHighlighted = [];
+let dragRafId = null;
+let lastDragEv = null;
+let hintSize = null;
 
 function visibleDays(){ return getDays(); }
 
@@ -771,41 +778,49 @@ function rectCells(aD, aS, bD, bS){
 }
 
 function cellEl(d, s){
-  return document.querySelector(`td.cell[data-d="${d}"][data-s="${s}"]`);
+  return CELL_MAP.get(`${d},${s}`) || document.querySelector(`td.cell[data-d="${d}"][data-s="${s}"]`);
 }
 
 function clearHighlights(){
-  document.querySelectorAll('td.cell.drop-target').forEach(td => td.classList.remove('drop-target'));
+  if(lastHighlighted.length){
+    for(let i = 0; i < lastHighlighted.length; i++){
+      lastHighlighted[i].classList.remove('drop-target', 'erase');
+    }
+    lastHighlighted = [];
+  }
 }
 
 function paintHighlight(cells, mode){
   clearHighlights();
-  cells.forEach(([d, s]) => {
-    const el = cellEl(d, s);
+  for(let i = 0; i < cells.length; i++){
+    const el = cellEl(cells[i][0], cells[i][1]);
     if(el){
       el.classList.add('drop-target');
       if(mode === 'erase') el.classList.add('erase');
+      lastHighlighted.push(el);
     }
-  });
+  }
 }
 
 function showDragHint(ev, text){
   if(!dragHintEl) return;
   dragHintEl.textContent = text;
   dragHintEl.style.display = 'block';
-  const w = dragHintEl.offsetWidth || 160;
-  const h = dragHintEl.offsetHeight || 30;
+  if(!hintSize){
+    hintSize = { w: dragHintEl.offsetWidth || 160, h: dragHintEl.offsetHeight || 30 };
+  }
   let x = ev.clientX + 14;
   let y = ev.clientY + 14;
-  if(x + w > window.innerWidth - 6) x = ev.clientX - w - 14;
+  if(x + hintSize.w > window.innerWidth - 6) x = ev.clientX - hintSize.w - 14;
   if(x < 6) x = 6;
-  if(y + h > window.innerHeight - 6) y = ev.clientY - h - 14;
+  if(y + hintSize.h > window.innerHeight - 6) y = ev.clientY - hintSize.h - 14;
   if(y < 6) y = 6;
   dragHintEl.style.left = x + 'px';
   dragHintEl.style.top = y + 'px';
 }
 
 function hideDragHint(){
+  hintSize = null;
   if(dragHintEl) dragHintEl.style.display = 'none';
 }
 
@@ -844,7 +859,16 @@ function onCellPointerDown(ev, d, s){
 }
 
 function onDragMove(ev){
-  if(!dragState) return;
+  lastDragEv = ev;
+  if(!dragRafId){
+    dragRafId = requestAnimationFrame(processDragMove);
+  }
+}
+
+function processDragMove(){
+  dragRafId = null;
+  const ev = lastDragEv;
+  if(!dragState || !ev) return;
   if(!dragState.moved){
     const dx = ev.clientX - dragState.startX;
     const dy = ev.clientY - dragState.startY;
@@ -856,6 +880,14 @@ function onDragMove(ev){
   const td = el && el.closest ? el.closest('td.cell') : null;
   if(!td || td.dataset.d === undefined) return;
   const d = Number(td.dataset.d), s = Number(td.dataset.s);
+  if(dragState.curD === d && dragState.curS === s){
+    let acao = 'Selecionados';
+    if(dragState.mode === 'paint') acao = 'Estender para';
+    else if(dragState.mode === 'erase') acao = 'Apagar de';
+    const count = rectCells(dragState.anchorD, dragState.anchorS, d, s).length;
+    showDragHint(ev, `${acao} ${count} horário${count === 1 ? '' : 's'}`);
+    return;
+  }
   dragState.curD = d;
   dragState.curS = s;
   const cells = rectCells(dragState.anchorD, dragState.anchorS, d, s);
@@ -867,6 +899,11 @@ function onDragMove(ev){
 }
 
 function onDragEnd(ev){
+  if(dragRafId){
+    cancelAnimationFrame(dragRafId);
+    dragRafId = null;
+  }
+  lastDragEv = null;
   window.removeEventListener('pointermove', onDragMove);
   window.removeEventListener('pointerup', onDragEnd);
   window.removeEventListener('pointercancel', onDragEnd);
