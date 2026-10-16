@@ -475,6 +475,19 @@ function removeEntries(ids){
   SCHEDULE = SCHEDULE.filter(e => !s.has(e.id));
 }
 
+// Atualiza TEAMS localmente a partir do payload de uma equipe (POST/PATCH).
+function upsertTeam(team){
+  if(!team || team.id == null) return;
+  const idx = TEAMS.findIndex(t => t.id === team.id);
+  if(idx >= 0) TEAMS[idx] = team;
+  else TEAMS.push(team);
+}
+function removeTeamLocal(teamId){
+  TEAMS = TEAMS.filter(t => t.id !== teamId);
+  selectedTeams.delete(teamId);
+  SCHEDULE = SCHEDULE.filter(e => e.team_id !== teamId);
+}
+
 // ─── Equipes ────────────────────────────────────────────────────────────────
 
 function renderTeams(){
@@ -1099,8 +1112,12 @@ async function createTeam(){
     return;
   }
   input.value = '';
-  if(res.data && res.data.id) selectedTeams.add(res.data.id);
-  await refresh();
+  if(res.data && res.data.id){
+    selectedTeams.add(res.data.id);
+    upsertTeam(res.data);
+    renderTeams();
+    renderGrid();
+  }
   uiToast(`Equipe "${name}" criada.`);
 }
 
@@ -1112,15 +1129,18 @@ async function renameTeam(team){
     method:'PATCH', headers:JSONHDR, body:JSON.stringify({name:name.trim()})
   });
   if(!res.ok || (res.data && res.data.erro)){ uiToast((res.data&&res.data.erro)||'Erro ao renomear.', 'erro'); return; }
-  await refresh();
+  upsertTeam(res.data);
+  renderTeams();
+  renderGrid();
 }
 
 async function removeTeam(team){
   if(!await uiConfirm(`Apagar a equipe "${team.name}"? As entradas da escala dela também serão removidas.`, {title:'Apagar equipe', okLabel:'Apagar', danger:true})) return;
   const res = await api(`/api/workspace/${WORKSPACE.slug}/teams/${team.id}`, {method:'DELETE'});
   if(!res.ok || (res.data && res.data.erro)){ uiToast((res.data&&res.data.erro)||'Erro ao apagar.', 'erro'); return; }
-  selectedTeams.delete(team.id);
-  await refresh();
+  removeTeamLocal(team.id);
+  renderTeams();
+  renderGrid();
   uiToast(`Equipe "${team.name}" apagada.`);
 }
 
@@ -1129,14 +1149,23 @@ async function addMemberToTeam(teamId, memberId){
     method:'POST', headers:JSONHDR, body:JSON.stringify({member_id:memberId})
   });
   if(!res.ok || (res.data && res.data.erro)){ uiToast((res.data&&res.data.erro)||'Erro ao adicionar.', 'erro'); return; }
-  await refresh();
+  upsertTeam(res.data);
+  renderTeams();
+  renderGrid();
 }
 
 async function removeMemberFromTeam(teamId, memberId, name){
   if(!await uiConfirm(`Remover ${name} da equipe?`, {title:'Remover integrante', okLabel:'Remover', danger:true})) return;
   const res = await api(`/api/workspace/${WORKSPACE.slug}/teams/${teamId}/members/${memberId}`, {method:'DELETE'});
   if(!res.ok || (res.data && res.data.erro)){ uiToast((res.data&&res.data.erro)||'Erro ao remover.', 'erro'); return; }
-  await refresh();
+  const t = TEAMS.find(x => x.id === teamId);
+  if(t && Array.isArray(t.members)){
+    t.members = t.members.filter(m => m.member_id !== memberId);
+    renderTeams();
+    renderGrid();
+  } else {
+    await refresh();
+  }
 }
 
 async function setLeader(teamId, memberId, isLeader){
@@ -1144,7 +1173,13 @@ async function setLeader(teamId, memberId, isLeader){
     method:'PATCH', headers:JSONHDR, body:JSON.stringify({is_leader:isLeader})
   });
   if(!res.ok || (res.data && res.data.erro)){ uiToast((res.data&&res.data.erro)||'Erro ao alterar líder.', 'erro'); return; }
-  await refresh();
+  if(res.data && res.data.id){
+    upsertTeam(res.data);
+    renderTeams();
+    renderGrid();
+  } else {
+    await refresh();
+  }
 }
 
 // ─── Eventos ────────────────────────────────────────────────────────────────
