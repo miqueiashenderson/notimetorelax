@@ -359,6 +359,54 @@ _ERRO_GENERICO_PAGE = (
 )
 
 
+import contextvars
+
+_query_count_var = contextvars.ContextVar("query_count", default=None)
+_perf_log_installed = False
+
+
+def _habilitar_perf_log():
+    global _perf_log_installed
+    if _perf_log_installed:
+        return
+    try:
+        from sqlalchemy import event
+        from database import get_engine
+        eng = get_engine()
+
+        @event.listens_for(eng, "before_cursor_execute")
+        def _contar(conn, cursor, statement, params, context, executemany):
+            cnt = _query_count_var.get()
+            if cnt is not None:
+                cnt[0] += 1
+
+        _perf_log_installed = True
+    except Exception as e:
+        logger.warning(f"Não foi possível instalar contador de queries: {e}")
+
+
+@app.middleware("http")
+async def perf_logging_middleware(request: Request, call_next):
+    if os.environ.get("PERF_LOG", "").strip().lower() not in {"1", "true", "yes"}:
+        return await call_next(request)
+    _habilitar_perf_log()
+    counter = [0]
+    token = _query_count_var.set(counter)
+    t0 = time.perf_counter()
+    status_code = 500
+    try:
+        response = await call_next(request)
+        status_code = response.status_code
+        return response
+    finally:
+        dur_ms = (time.perf_counter() - t0) * 1000
+        queries = counter[0]
+        _query_count_var.reset(token)
+        logger.info(
+            f"[PERF] {request.method} {request.url.path} -> {status_code} ({dur_ms:.1f}ms, {queries} queries)"
+        )
+
+
 @app.middleware("http")
 async def ensure_db(request: Request, call_next):
     try:
