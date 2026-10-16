@@ -24,3 +24,10 @@ Este documento registra problemas identificados fora do roteiro ou decisões de 
   2. Passar dados iniciais do servidor via tags `<script type="application/json" id="server-data">` (seguras e inertes para execução direta).
   3. Substituir `'unsafe-inline'` por CSP estrito (`script-src 'self'`) ou por nonces gerados por requisição (`script-src 'nonce-{token}'`).
 - **Decisão:** Planejado para refatoração de frontend dedicada, preservando compatibilidade imediata e evitando quebras de script em navegadores sem teste ponta-a-ponta.
+
+## D19 (correção) — Falha de deploy: conflito `builds` × `functions` no `vercel.json`
+- **Sintoma:** O deploy no Vercel falhava na validação da configuração, antes do build.
+- **Causa raiz:** O D19 adicionou as chaves `regions` e `functions` ao `vercel.json` que ainda continha a chave legada `builds`. O Vercel **não permite** usar `functions` e `builds` ao mesmo tempo ("Conflicting functions and builds configuration"). A configuração original (commit `a6ae19e`) já usava `builds` + `routes` e funcionava; a introdução de `functions` quebrou o deploy.
+- **Correção:** Removidas as chaves legadas `builds` e `routes`. O runtime Python do Vercel detecta automaticamente aplicações FastAPI (arquivo `main.py` com variável `app` + `fastapi` em `requirements.txt`) e roteia todas as requisições para a aplicação. Mantidas `regions: ["gru1"]` e `functions.main.py.maxDuration: 15`.
+- **Referência:** https://vercel.com/docs/errors/error-list#conflicting-functions-and-builds-configuration
+- **Alternativa conservadora:** caso a detecção automática do framework não ocorra, restaurar `builds` + `routes` e remover apenas `functions`, configurando região/duração pela interface do projeto no dashboard.
