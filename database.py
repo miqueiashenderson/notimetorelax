@@ -918,7 +918,7 @@ def add_schedule_entries_bulk(
     status: str = "planejado",
     created_by_user_id: int | None = None,
 ):
-    """Insere várias entradas da escala em UMA ida ao banco (INSERT em lote).
+    """Insere várias entradas da escala em UMA ida ao banco (INSERT com RETURNING).
 
     Recebe `cells` como iterável de pares (dia, slot). Retorna a lista de dicts
     das entradas criadas (com id), na ordem recebida.
@@ -942,24 +942,17 @@ def add_schedule_entries_bulk(
     if not rows:
         return []
     with Session(get_engine()) as sess:
-        # execute() com lista de parâmetros => executemany: UMA ida ao banco,
-        # tanto no SQLite quanto no Postgres (não um INSERT por célula).
-        sess.execute(insert(ScheduleEntry.__table__), rows)
+        # INSERT com RETURNING: UMA query para inserir e recuperar os ids.
+        stmt = (
+            insert(ScheduleEntry.__table__)
+            .returning(ScheduleEntry.id, ScheduleEntry.day, ScheduleEntry.slot)
+        )
+        result = sess.execute(stmt, rows)
+        criadas = [{"id": row[0], "day": row[1], "slot": row[2]} for row in result]
         sess.commit()
-        # Busca as entradas recém-criadas em UMA query (para devolver os ids).
-        pares = or_(
-            *[and_(ScheduleEntry.day == d, ScheduleEntry.slot == s) for (d, s) in cells]
-        )
-        criadas = (
-            sess.query(ScheduleEntry)
-            .filter(
-                ScheduleEntry.workspace_id == workspace_id,
-                ScheduleEntry.team_id == team_id,
-                pares,
-            )
-            .all()
-        )
-        return [e.to_dict() for e in criadas]
+        # Construir dicts completos na ordem das células
+        criadas_por_par = {(e["day"], e["slot"]): e for e in criadas}
+        return [criadas_por_par[(d, s)] for (d, s) in cells]
 
 
 def delete_schedule_entries_bulk(entry_ids, workspace_id: int) -> int:
