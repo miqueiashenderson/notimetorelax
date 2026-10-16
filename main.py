@@ -1,4 +1,4 @@
-import os, time, hashlib, hmac, secrets, urllib.parse, unicodedata, csv, io, logging, threading
+import os, re, time, hashlib, hmac, secrets, urllib.parse, unicodedata, csv, io, logging, threading
 import httpx
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request, UploadFile, File, Form, Query
@@ -13,11 +13,22 @@ from database import (
     init_db, create_workspace, get_workspace, get_members, get_member,
     add_member, remove_member, delete_workspace, claim_workspace,
     check_password, get_or_create_user, get_user,
-    update_extra_busy, update_own_extra_busy,
+    update_extra_busy, update_own_extra_busy, update_own_busy,
+    get_teams, get_team, create_team, update_team, delete_team,
+    get_team_members, get_workspace_team_members, add_team_member,
+    remove_team_member, set_team_leader, is_team_leader, get_leading_team_ids,
+    get_schedule_entries, get_schedule_entry, add_schedule_entry,
+    update_schedule_entry, delete_schedule_entry, SCHEDULE_STATUSES,
 )
 from extractor import extrair_de_pdf_bytes, title_case, SLOTS
 
 ALL_DAYS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]
+
+STATUS_LABELS = {
+    "planejado": "Planejado",
+    "em_andamento": "Em andamento",
+    "concluido": "Concluído",
+}
 
 SESSION_TTL = 86400 * 30
 
@@ -182,6 +193,114 @@ def _redirect_url(path: str, erro: str = "") -> str:
         return path
     sep = "&" if "?" in path else "?"
     return f"{path}{sep}erro={erro}"
+
+
+# ── Equipes e escala: helpers de serialização e permissão ────────────────────
+
+_VALID_COLOR = re.compile(r"^#[0-9a-fA-F]{6}$")
+
+
+def _teams_payload(ws) -> list:
+    """Equipes do workspace com seus integrantes (e marcação de líder)."""
+    members = {m.id: m for m in get_members(ws.id)}
+    by_team: dict[int, list] = {}
+    for tm in get_workspace_team_members(ws.id):
+        if tm.member_id in members:
+            by_team.setdefault(tm.team_id, []).append(tm)
+    out = []
+    for t in get_teams(ws.id):
+        tms = []
+        for tm in by_team.get(t.id, []):
+            m = members[tm.member_id]
+            tms.append({
+                "member_id": m.id,
+                "name": m.name,
+                "color": m.color,
+                "user_id": m.user_id,
+                "is_leader": bool(tm.is_leader),
+            })
+        tms.sort(key=lambda x: (not x["is_leader"], x["name"].lower()))
+        d = t.to_dict()
+        d["members"] = tms
+        out.append(d)
+    return out
+
+
+def _schedule_payload(ws) -> list:
+    """Entradas da escala com os conflitos (integrantes ocupados) de cada uma."""
+    members = {m.id: m for m in get_members(ws.id)}
+    busy = {mid: {(b[0], b[1]) for b in m.get_all_busy()} for mid, m in members.items()}
+    team_members: dict[int, list] = {}
+    for tm in get_workspace_team_members(ws.id):
+        team_members.setdefault(tm.team_id, []).append(tm.member_id)
+    out = []
+    for e in get_schedule_entries(ws.id):
+        conflitos = []
+        for mid in team_members.get(e.team_id, []):
+            m = members.get(mid)
+            if m and (e.day, e.slot) in busy.get(mid, set()):
+                conflitos.append({"id": m.id, "name": m.name})
+        d = e.to_dict()
+        d["conflicts"] = conflitos
+        out.append(d)
+    return out
+
+
+def _can_manage_team(ws, team, user_id) -> bool:
+    if not user_id or team is None or team.workspace_id != ws.id:
+        return False
+    if ws.owner_id == user_id:
+        return True
+    return is_team_leader(team.id, user_id, ws.id)
+
+
+def _coerce_int(value):
+    if isinstance(value, bool):
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _load_authed_ws(request: Request, slug: str):
+    """Retorna (workspace, None) quando autenticado, ou (None, JSONResponse) de erro."""
+    ws = get_workspace(slug)
+    if not ws:
+        return None, JSONResponse({"erro": "Workspace não encontrado."}, status_code=404)
+    if not _require_google(request):
+        return None, JSONResponse({"erro": "Faça login com Google."}, status_code=401)
+    if not _require_auth(request, ws):
+        return None, JSONResponse({"erro": "Acesso negado."}, status_code=403)
+    return ws, None
+
+
+def _conflicts_for(ws, team_id: int, day: int, slot: int) -> list:
+    """Integrantes da equipe ocupados (aula/outro) no dia/slot informado."""
+    members = {m.id: m for m in get_members(ws.id)}
+    out = []
+    for tm in get_team_members(team_id):
+        m = members.get(tm.member_id)
+        if not m:
+            continue
+        if any(b[0] == day and b[1] == slot for b in m.get_all_busy()):
+            out.append({"id": m.id, "name": m.name})
+    return out
+
+
+def _normalizar_slots(raw) -> list | None:
+    """Valida uma lista de pares [dia, slot] (0..6 / 0..13), descartando
+    entradas inválidas. Retorna None se o valor não for uma lista."""
+    if not isinstance(raw, list):
+        return None
+    return [
+        [item[0], item[1]]
+        for item in raw
+        if isinstance(item, list) and len(item) == 2
+        and isinstance(item[0], int) and isinstance(item[1], int)
+        and not isinstance(item[0], bool) and not isinstance(item[1], bool)
+        and 0 <= item[0] <= 6 and 0 <= item[1] <= 13
+    ]
 
 
 app = FastAPI(title="NoTimeToRelax")
@@ -412,6 +531,43 @@ async def upload_page(request: Request, slug: str):
     )
 
 
+@app.get("/workspace/{slug}/escala", response_class=HTMLResponse)
+async def escala_page(request: Request, slug: str):
+    ws = get_workspace(slug)
+    if not ws:
+        return templates.TemplateResponse(
+            request=request, name="landing.html", context={"erro": "Workspace não encontrado."}
+        )
+    if not _require_google(request):
+        return RedirectResponse(
+            url=f"/auth/google/login?next={urllib.parse.quote(f'/workspace/{slug}/escala')}",
+            status_code=302,
+        )
+    if not _require_auth(request, ws):
+        return RedirectResponse(url=f"/workspace/{slug}/login", status_code=302)
+    user = _get_current_user(request)
+    uid = user.id if user else None
+    response = templates.TemplateResponse(
+        request=request,
+        name="escala.html",
+        context={
+            "workspace": ws.to_dict(),
+            "members": [m.to_dict() for m in get_members(ws.id)],
+            "teams": _teams_payload(ws),
+            "schedule": _schedule_payload(ws),
+            "status_labels": STATUS_LABELS,
+            "user": user.to_dict() if user else None,
+            "is_owner": bool(uid and ws.owner_id == uid),
+            "leading_team_ids": sorted(get_leading_team_ids(ws.id, uid)) if uid else [],
+        },
+    )
+    # Evita que o navegador sirva uma versão antiga da página (JS/CSS) após
+    # atualizações; a escala depende de JS e o cache causava botões "mortos".
+    response.headers["Cache-Control"] = "no-store, must-revalidate"
+    response.headers["Pragma"] = "no-cache"
+    return response
+
+
 # ─── API ─────────────────────────────────────────────────────────────────────
 
 
@@ -620,20 +776,56 @@ async def api_update_extra_busy(slug: str, member_id: int, request: Request):
         return JSONResponse({"erro": "Acesso negado."}, status_code=403)
     body = await request.json()
     extra_busy = body.get("extra_busy")
-    if not isinstance(extra_busy, list):
+    normalizados = _normalizar_slots(extra_busy)
+    if normalizados is None:
         return JSONResponse({"erro": "extra_busy deve ser uma lista."}, status_code=400)
-    normalizados = [
-        [item[0], item[1]]
-        for item in extra_busy
-        if isinstance(item, list) and len(item) == 2
-        and isinstance(item[0], int) and isinstance(item[1], int)
-        and not isinstance(item[0], bool) and not isinstance(item[1], bool)
-        and 0 <= item[0] <= 6 and 0 <= item[1] <= 13
-    ]
     user_id = _current_user_id(request)
     if not user_id:
         return JSONResponse({"erro": "Faça login com Google."}, status_code=401)
     res = update_own_extra_busy(member_id, normalizados, workspace_id=ws.id, owner_user_id=user_id)
+    if res is None:
+        return JSONResponse({"erro": "Membro não encontrado."}, status_code=404)
+    if res is False:
+        return JSONResponse({"erro": "Você não pode editar os horários deste membro."}, status_code=403)
+    return JSONResponse(res)
+
+
+@app.patch("/api/workspace/{slug}/members/{member_id}/busy")
+async def api_update_busy(slug: str, member_id: int, request: Request):
+    """Edita os horários do próprio membro: aulas apagadas (removed_busy) e
+    compromissos extras (extra_busy). Ambos os campos são opcionais; quando
+    omitidos, o valor atual é mantido."""
+    ws = get_workspace(slug)
+    if not ws:
+        return JSONResponse({"erro": "Workspace não encontrado."}, status_code=404)
+    if not _require_google(request):
+        return JSONResponse({"erro": "Faça login com Google."}, status_code=401)
+    if not _require_auth(request, ws):
+        return JSONResponse({"erro": "Acesso negado."}, status_code=403)
+    body = await request.json()
+    if "extra_busy" not in body and "removed_busy" not in body:
+        return JSONResponse(
+            {"erro": "Informe extra_busy e/ou removed_busy."}, status_code=400
+        )
+    extra_busy = removed_busy = None
+    if "extra_busy" in body:
+        extra_busy = _normalizar_slots(body.get("extra_busy"))
+        if extra_busy is None:
+            return JSONResponse({"erro": "extra_busy deve ser uma lista."}, status_code=400)
+    if "removed_busy" in body:
+        removed_busy = _normalizar_slots(body.get("removed_busy"))
+        if removed_busy is None:
+            return JSONResponse({"erro": "removed_busy deve ser uma lista."}, status_code=400)
+    user_id = _current_user_id(request)
+    if not user_id:
+        return JSONResponse({"erro": "Faça login com Google."}, status_code=401)
+    res = update_own_busy(
+        member_id,
+        removed_busy,
+        extra_busy,
+        workspace_id=ws.id,
+        owner_user_id=user_id,
+    )
     if res is None:
         return JSONResponse({"erro": "Membro não encontrado."}, status_code=404)
     if res is False:
@@ -654,6 +846,406 @@ async def api_remove_member(request: Request, slug: str, member_id: int):
     if not ok:
         return JSONResponse({"erro": "Membro não encontrado."}, status_code=404)
     return JSONResponse({"ok": True})
+
+
+# ─── API: Equipes e escala de trabalho ───────────────────────────────────────
+
+
+@app.get("/api/workspace/{slug}/teams")
+async def api_get_teams(request: Request, slug: str):
+    ws, err = _load_authed_ws(request, slug)
+    if err:
+        return err
+    return JSONResponse(_teams_payload(ws))
+
+
+@app.post("/api/workspace/{slug}/teams")
+async def api_create_team(request: Request, slug: str):
+    ws, err = _load_authed_ws(request, slug)
+    if err:
+        return err
+    user_id = _current_user_id(request)
+    if ws.owner_id is None or ws.owner_id != user_id:
+        return JSONResponse(
+            {"erro": "Apenas o criador do workspace pode criar equipes."}, status_code=403
+        )
+    body = await request.json()
+    name = body.get("name", "")
+    if not isinstance(name, str) or not name.strip():
+        return JSONResponse({"erro": "Nome da equipe é obrigatório."}, status_code=400)
+    color = body.get("color")
+    if not (isinstance(color, str) and _VALID_COLOR.match(color)):
+        color = None
+    team = create_team(ws.id, name.strip(), color)
+    payload = next((t for t in _teams_payload(ws) if t["id"] == team.id), team.to_dict())
+    return JSONResponse(payload)
+
+
+@app.patch("/api/workspace/{slug}/teams/{team_id}")
+async def api_update_team(request: Request, slug: str, team_id: int):
+    ws, err = _load_authed_ws(request, slug)
+    if err:
+        return err
+    user_id = _current_user_id(request)
+    if ws.owner_id is None or ws.owner_id != user_id:
+        return JSONResponse(
+            {"erro": "Apenas o criador do workspace pode editar equipes."}, status_code=403
+        )
+    team = get_team(team_id)
+    if not team or team.workspace_id != ws.id:
+        return JSONResponse({"erro": "Equipe não encontrada."}, status_code=404)
+    body = await request.json()
+    name = body.get("name")
+    if name is not None and (not isinstance(name, str) or not name.strip()):
+        return JSONResponse({"erro": "Nome inválido."}, status_code=400)
+    color = body.get("color")
+    if not (isinstance(color, str) and _VALID_COLOR.match(color)):
+        color = None
+    update_team(team_id, ws.id, name=name if isinstance(name, str) else None, color=color)
+    payload = next((t for t in _teams_payload(ws) if t["id"] == team_id), None)
+    return JSONResponse(payload)
+
+
+@app.delete("/api/workspace/{slug}/teams/{team_id}")
+async def api_delete_team(request: Request, slug: str, team_id: int):
+    ws, err = _load_authed_ws(request, slug)
+    if err:
+        return err
+    user_id = _current_user_id(request)
+    if ws.owner_id is None or ws.owner_id != user_id:
+        return JSONResponse(
+            {"erro": "Apenas o criador do workspace pode apagar equipes."}, status_code=403
+        )
+    if not delete_team(team_id, ws.id):
+        return JSONResponse({"erro": "Equipe não encontrada."}, status_code=404)
+    return JSONResponse({"ok": True})
+
+
+@app.post("/api/workspace/{slug}/teams/{team_id}/members")
+async def api_add_team_member(request: Request, slug: str, team_id: int):
+    ws, err = _load_authed_ws(request, slug)
+    if err:
+        return err
+    user_id = _current_user_id(request)
+    team = get_team(team_id)
+    if not team or team.workspace_id != ws.id:
+        return JSONResponse({"erro": "Equipe não encontrada."}, status_code=404)
+    if not _can_manage_team(ws, team, user_id):
+        return JSONResponse({"erro": "Você não pode editar esta equipe."}, status_code=403)
+    body = await request.json()
+    member_id = _coerce_int(body.get("member_id"))
+    if member_id is None:
+        return JSONResponse({"erro": "Membro inválido."}, status_code=400)
+    member = get_member(member_id)
+    if not member or member.workspace_id != ws.id:
+        return JSONResponse({"erro": "Membro não encontrado."}, status_code=404)
+    is_leader = bool(body.get("is_leader", False))
+    if is_leader and ws.owner_id != user_id:
+        is_leader = False
+    add_team_member(team_id, member_id, is_leader=is_leader)
+    payload = next((t for t in _teams_payload(ws) if t["id"] == team_id), None)
+    return JSONResponse(payload)
+
+
+@app.delete("/api/workspace/{slug}/teams/{team_id}/members/{member_id}")
+async def api_remove_team_member(request: Request, slug: str, team_id: int, member_id: int):
+    ws, err = _load_authed_ws(request, slug)
+    if err:
+        return err
+    user_id = _current_user_id(request)
+    team = get_team(team_id)
+    if not team or team.workspace_id != ws.id:
+        return JSONResponse({"erro": "Equipe não encontrada."}, status_code=404)
+    if not _can_manage_team(ws, team, user_id):
+        return JSONResponse({"erro": "Você não pode editar esta equipe."}, status_code=403)
+    if not remove_team_member(team_id, member_id):
+        return JSONResponse({"erro": "Integrante não encontrado."}, status_code=404)
+    return JSONResponse({"ok": True})
+
+
+@app.patch("/api/workspace/{slug}/teams/{team_id}/leaders/{member_id}")
+async def api_set_team_leader(request: Request, slug: str, team_id: int, member_id: int):
+    ws, err = _load_authed_ws(request, slug)
+    if err:
+        return err
+    user_id = _current_user_id(request)
+    if ws.owner_id is None or ws.owner_id != user_id:
+        return JSONResponse(
+            {"erro": "Apenas o criador do workspace pode definir líderes."}, status_code=403
+        )
+    team = get_team(team_id)
+    if not team or team.workspace_id != ws.id:
+        return JSONResponse({"erro": "Equipe não encontrada."}, status_code=404)
+    body = await request.json()
+    tm = set_team_leader(team_id, member_id, bool(body.get("is_leader", True)))
+    if tm is None:
+        return JSONResponse({"erro": "Integrante não encontrado na equipe."}, status_code=404)
+    payload = next((t for t in _teams_payload(ws) if t["id"] == team_id), None)
+    return JSONResponse(payload)
+
+
+@app.get("/api/workspace/{slug}/schedule")
+async def api_get_schedule(request: Request, slug: str):
+    ws, err = _load_authed_ws(request, slug)
+    if err:
+        return err
+    return JSONResponse(_schedule_payload(ws))
+
+
+@app.post("/api/workspace/{slug}/schedule")
+async def api_add_schedule_entry(request: Request, slug: str):
+    ws, err = _load_authed_ws(request, slug)
+    if err:
+        return err
+    user_id = _current_user_id(request)
+    body = await request.json()
+    team_id = _coerce_int(body.get("team_id"))
+    team = get_team(team_id) if team_id is not None else None
+    if not team or team.workspace_id != ws.id:
+        return JSONResponse({"erro": "Equipe não encontrada."}, status_code=404)
+    if not _can_manage_team(ws, team, user_id):
+        return JSONResponse({"erro": "Você não pode editar esta equipe."}, status_code=403)
+    day = _coerce_int(body.get("day"))
+    slot = _coerce_int(body.get("slot"))
+    if day is None or not (0 <= day <= 6) or slot is None or not (0 <= slot <= len(SLOTS) - 1):
+        return JSONResponse({"erro": "Dia ou horário inválido."}, status_code=400)
+    status = body.get("status", "planejado")
+    if status not in SCHEDULE_STATUSES:
+        return JSONResponse({"erro": "Status inválido."}, status_code=400)
+    task = body.get("task", "")
+    if not isinstance(task, str):
+        task = ""
+    conflicts = _conflicts_for(ws, team_id, day, slot)
+    if conflicts and not bool(body.get("force")):
+        return JSONResponse(
+            {"erro": "Há integrantes ocupados nesse horário.", "conflicts": conflicts, "needs_confirm": True},
+            status_code=409,
+        )
+    entry = add_schedule_entry(
+        ws.id, team_id, day, slot, task=task, status=status, created_by_user_id=user_id
+    )
+    d = entry.to_dict()
+    d["conflicts"] = conflicts
+    return JSONResponse(d)
+
+
+@app.post("/api/workspace/{slug}/schedule/bulk")
+async def api_add_schedule_bulk(request: Request, slug: str):
+    ws, err = _load_authed_ws(request, slug)
+    if err:
+        return err
+    user_id = _current_user_id(request)
+    body = await request.json()
+    team_id = _coerce_int(body.get("team_id"))
+    team = get_team(team_id) if team_id is not None else None
+    if not team or team.workspace_id != ws.id:
+        return JSONResponse({"erro": "Equipe não encontrada."}, status_code=404)
+    if not _can_manage_team(ws, team, user_id):
+        return JSONResponse({"erro": "Você não pode editar esta equipe."}, status_code=403)
+
+    status = body.get("status", "planejado")
+    if status not in SCHEDULE_STATUSES:
+        return JSONResponse({"erro": "Status inválido."}, status_code=400)
+    task = body.get("task", "")
+    if not isinstance(task, str):
+        task = ""
+
+    cells_raw = body.get("cells")
+    if not isinstance(cells_raw, list) or not cells_raw:
+        return JSONResponse({"erro": "Nenhum horário selecionado."}, status_code=400)
+    cells, seen = [], set()
+    for c in cells_raw:
+        if not isinstance(c, list) or len(c) != 2:
+            continue
+        d, s = _coerce_int(c[0]), _coerce_int(c[1])
+        if d is None or s is None or not (0 <= d <= 6 and 0 <= s <= len(SLOTS) - 1):
+            continue
+        if (d, s) in seen:
+            continue
+        seen.add((d, s))
+        cells.append((d, s))
+    if not cells:
+        return JSONResponse({"erro": "Horários inválidos."}, status_code=400)
+
+    existing = {
+        (e.day, e.slot) for e in get_schedule_entries(ws.id) if e.team_id == team_id
+    }
+    new_cells = sorted(c for c in cells if c not in existing)
+
+    conflicts_map: dict[int, dict] = {}
+    for d, s in new_cells:
+        for c in _conflicts_for(ws, team_id, d, s):
+            conflicts_map[c["id"]] = c
+    conflicts = list(conflicts_map.values())
+    if conflicts and not bool(body.get("force")):
+        return JSONResponse(
+            {
+                "erro": "Há integrantes ocupados em horários selecionados.",
+                "conflicts": conflicts,
+                "needs_confirm": True,
+                "cells": len(new_cells),
+            },
+            status_code=409,
+        )
+
+    created = []
+    for d, s in new_cells:
+        entry = add_schedule_entry(
+            ws.id, team_id, d, s, task=task, status=status, created_by_user_id=user_id
+        )
+        created.append(entry.to_dict())
+    return JSONResponse(
+        {
+            "created": len(created),
+            "skipped": len(cells) - len(created),
+            "conflicts": conflicts,
+            "entries": created,
+        }
+    )
+
+
+@app.patch("/api/workspace/{slug}/schedule/{entry_id}")
+async def api_update_schedule_entry(request: Request, slug: str, entry_id: int):
+    ws, err = _load_authed_ws(request, slug)
+    if err:
+        return err
+    user_id = _current_user_id(request)
+    entry = get_schedule_entry(entry_id)
+    if not entry or entry.workspace_id != ws.id:
+        return JSONResponse({"erro": "Entrada não encontrada."}, status_code=404)
+    team = get_team(entry.team_id)
+    if not _can_manage_team(ws, team, user_id):
+        return JSONResponse({"erro": "Você não pode editar esta equipe."}, status_code=403)
+    body = await request.json()
+
+    team_id = entry.team_id
+    if body.get("team_id") is not None:
+        ntid = _coerce_int(body.get("team_id"))
+        nteam = get_team(ntid) if ntid is not None else None
+        if not nteam or nteam.workspace_id != ws.id:
+            return JSONResponse({"erro": "Equipe não encontrada."}, status_code=404)
+        if not _can_manage_team(ws, nteam, user_id):
+            return JSONResponse({"erro": "Você não pode editar esta equipe."}, status_code=403)
+        team_id = ntid
+
+    day = entry.day
+    if body.get("day") is not None:
+        day = _coerce_int(body.get("day"))
+        if day is None or not (0 <= day <= 6):
+            return JSONResponse({"erro": "Dia inválido."}, status_code=400)
+    slot = entry.slot
+    if body.get("slot") is not None:
+        slot = _coerce_int(body.get("slot"))
+        if slot is None or not (0 <= slot <= len(SLOTS) - 1):
+            return JSONResponse({"erro": "Horário inválido."}, status_code=400)
+
+    status = entry.status
+    if body.get("status") is not None:
+        if body.get("status") not in SCHEDULE_STATUSES:
+            return JSONResponse({"erro": "Status inválido."}, status_code=400)
+        status = body.get("status")
+
+    task = body.get("task") if isinstance(body.get("task"), str) else None
+
+    conflicts = _conflicts_for(ws, team_id, day, slot)
+    if conflicts and not bool(body.get("force")):
+        return JSONResponse(
+            {"erro": "Há integrantes ocupados nesse horário.", "conflicts": conflicts, "needs_confirm": True},
+            status_code=409,
+        )
+    e = update_schedule_entry(
+        entry_id, ws.id, task=task, status=status, team_id=team_id, day=day, slot=slot
+    )
+    d = e.to_dict()
+    d["conflicts"] = conflicts
+    return JSONResponse(d)
+
+
+@app.delete("/api/workspace/{slug}/schedule/{entry_id}")
+async def api_delete_schedule_entry(request: Request, slug: str, entry_id: int):
+    ws, err = _load_authed_ws(request, slug)
+    if err:
+        return err
+    user_id = _current_user_id(request)
+    entry = get_schedule_entry(entry_id)
+    if not entry or entry.workspace_id != ws.id:
+        return JSONResponse({"erro": "Entrada não encontrada."}, status_code=404)
+    team = get_team(entry.team_id)
+    if not _can_manage_team(ws, team, user_id):
+        return JSONResponse({"erro": "Você não pode editar esta equipe."}, status_code=403)
+    delete_schedule_entry(entry_id, ws.id)
+    return JSONResponse({"ok": True})
+
+
+@app.post("/api/workspace/{slug}/schedule/bulk-delete")
+async def api_delete_schedule_bulk(request: Request, slug: str):
+    ws, err = _load_authed_ws(request, slug)
+    if err:
+        return err
+    user_id = _current_user_id(request)
+    body = await request.json()
+    ids_raw = body.get("ids")
+    if not isinstance(ids_raw, list) or not ids_raw:
+        return JSONResponse({"erro": "Nenhuma entrada selecionada."}, status_code=400)
+
+    entries = {e.id: e for e in get_schedule_entries(ws.id)}
+    deleted, skipped = 0, 0
+    for raw in ids_raw:
+        entry_id = _coerce_int(raw)
+        entry = entries.get(entry_id) if entry_id is not None else None
+        if not entry:
+            skipped += 1
+            continue
+        team = get_team(entry.team_id)
+        if not _can_manage_team(ws, team, user_id):
+            skipped += 1
+            continue
+        if delete_schedule_entry(entry.id, ws.id):
+            deleted += 1
+        else:
+            skipped += 1
+    return JSONResponse({"deleted": deleted, "skipped": skipped})
+
+
+@app.get("/api/workspace/{slug}/schedule.csv")
+async def api_export_schedule_csv(request: Request, slug: str):
+    ws, err = _load_authed_ws(request, slug)
+    if err:
+        return err
+    teams = {t.id: t for t in get_teams(ws.id)}
+    entries = get_schedule_entries(ws.id)
+    grid: dict[tuple, list] = {}
+    for e in entries:
+        grid.setdefault((e.slot, e.day), []).append(e)
+    tem_fim_de_semana = any(e.day in (5, 6) for e in entries)
+    dias = ALL_DAYS if tem_fim_de_semana else ALL_DAYS[:5]
+
+    out = io.StringIO()
+    writer = csv.writer(out, delimiter=";", lineterminator="\n")
+    writer.writerow(["Horário"] + dias)
+    for s, slot in enumerate(SLOTS):
+        linha = [slot]
+        for d in range(len(dias)):
+            partes = []
+            for e in grid.get((s, d), []):
+                t = teams.get(e.team_id)
+                nome = t.name if t else "?"
+                txt = nome
+                if e.task:
+                    txt += f" — {e.task}"
+                txt += f" [{STATUS_LABELS.get(e.status, e.status)}]"
+                partes.append(_csv_safe(txt))
+            linha.append(" | ".join(partes))
+        writer.writerow(linha)
+
+    conteudo = "\ufeff" + out.getvalue()
+    return Response(
+        content=conteudo,
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": f'attachment; filename="escala-{slug}.csv"'
+        },
+    )
 
 
 @app.delete("/api/workspace/{slug}")

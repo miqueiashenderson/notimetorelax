@@ -494,6 +494,7 @@
       <h2 style="margin:0;">Integrantes ({{ members|length }}) — clique para filtrar</h2>
       <div style="display:flex;gap:8px;align-items:center;">
         <button class="btn" id="btnEditExtra" style="display:none;">Editar meus horários</button>
+        <a href="/workspace/{{ workspace.slug }}/escala" class="btn">Escala de trabalho</a>
         <button class="btn" onclick="copiarLink(this)">Copiar link do workspace</button>
         <a href="/workspace/{{ workspace.slug }}/upload" class="btn btn-primary">+ Enviar PDF</a>
       </div>
@@ -589,6 +590,7 @@
     <div class="panel-actions" style="justify-content:space-between;">
       <h2 style="margin:0;">Integrantes</h2>
       <div style="display:flex;gap:8px;align-items:center;">
+        <a href="/workspace/{{ workspace.slug }}/escala" class="btn">Escala de trabalho</a>
         <button class="btn" onclick="copiarLink(this)">Copiar link</button>
         <a href="/workspace/{{ workspace.slug }}/upload" class="btn btn-primary">+ Enviar PDF</a>
       </div>

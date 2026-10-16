@@ -1,0 +1,1183 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Escala de trabalho — {{ workspace.name }} — NoTimeToRelax</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+
+  :root{
+    --bg:        #141416;
+    --surface:   #1c1c1f;
+    --surface-2: #252529;
+    --line:      #34343a;
+    --fg:        #f3f4f8;
+    --dim:       #9696a0;
+    --cyan:      #3ddbd9;
+    --magenta:   #ee5396;
+    --green:     #42be65;
+    --yellow:    #d2a106;
+    --mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    --sans: 'Inter', -apple-system, 'Segoe UI', sans-serif;
+  }
+
+  *{box-sizing:border-box;}
+  body{
+    margin:0;background:var(--bg);color:var(--fg);font-family:var(--sans);
+    padding:24px 16px 60px;-webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1240px;margin:0 auto;}
+
+  header{margin-bottom:18px;}
+  .eyebrow{
+    font-family:var(--mono);font-size:11px;letter-spacing:.14em;color:var(--cyan);
+    text-transform:uppercase;margin:0 0 8px;
+  }
+  .eyebrow a{color:var(--dim);text-decoration:none;}
+  .eyebrow a:hover{color:var(--cyan);}
+  h1{font-size:26px;font-weight:700;margin:0 0 6px;letter-spacing:-.01em;}
+  .sub{color:var(--dim);font-size:13.5px;margin:0;max-width:760px;line-height:1.5;}
+
+  .disclaimer{
+    margin-top:14px;background:var(--surface);border:1px solid var(--line);
+    border-left:3px solid var(--yellow);border-radius:6px;padding:10px 14px;
+    font-size:12px;color:var(--dim);line-height:1.5;
+  }
+  .disclaimer b{color:var(--fg);}
+
+  .panel{
+    margin-top:16px;background:var(--surface);border:1px solid var(--line);
+    border-radius:10px;padding:14px 18px;
+  }
+  .panel h2{
+    font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;
+    color:var(--dim);margin:0 0 12px;
+  }
+  .panel-head{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px;}
+  .panel-head h2{margin:0;}
+
+  .btn{
+    font-family:var(--mono);font-size:11px;letter-spacing:.04em;color:var(--cyan);
+    background:transparent;border:1px solid var(--line);padding:6px 12px;border-radius:6px;
+    cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:6px;
+    transition:all .15s;user-select:none;
+  }
+  .btn:hover{border-color:var(--cyan);background:rgba(61,219,217,.08);}
+  .btn-primary{border-color:var(--cyan);background:rgba(61,219,217,.12);color:var(--cyan);font-weight:600;}
+  .btn-primary:hover{background:var(--cyan);color:var(--bg);}
+  .btn-danger{border-color:var(--magenta);color:var(--magenta);}
+  .btn-danger:hover{border-color:var(--magenta);background:rgba(238,83,150,.14);}
+  .btn:disabled{opacity:.5;cursor:not-allowed;}
+  .btn-filter.active{background:var(--cyan);color:var(--bg);border-color:var(--cyan);font-weight:700;}
+  .btn-erase{border-color:var(--magenta);color:var(--magenta);}
+  .btn-erase:hover{border-color:var(--magenta);background:rgba(238,83,150,.12);}
+  .btn-erase.active{background:var(--magenta);color:var(--bg);border-color:var(--magenta);font-weight:700;}
+  body.erasing .cell.addable:hover{outline:2px solid var(--magenta);outline-offset:-2px;background:rgba(238,83,150,.12);}
+  body.erasing .sched-chip.editable{cursor:crosshair;}
+  /* Em dispositivos de toque, evitar que o gesto vire rolagem e cancele o arraste. */
+  body.erasing .cell.addable{touch-action:none;}
+  .sched-chip.editable{touch-action:none;}
+  .cell.drop-target{outline:2px dashed var(--cyan);outline-offset:-2px;background:rgba(61,219,217,.12);}
+  .cell.drop-target.erase{outline:2px dashed var(--magenta);background:rgba(238,83,150,.16);}
+
+  .input,select.input{
+    font-family:var(--sans);font-size:12.5px;color:var(--fg);background:var(--surface-2);
+    border:1px solid var(--line);border-radius:6px;padding:7px 9px;outline:none;
+  }
+  .input:focus{border-color:var(--cyan);}
+  .muted{color:var(--dim);font-size:12.5px;}
+
+  .row-flex{display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
+  .create-team{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px;}
+
+  .teams{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;}
+  .team-card{
+    background:var(--surface-2);border:1px solid var(--line);border-radius:8px;padding:12px;
+  }
+  .team-head{display:flex;align-items:center;gap:8px;margin-bottom:8px;}
+  .team-dot{width:10px;height:10px;border-radius:3px;flex:none;}
+  .team-name{font-family:var(--mono);font-weight:600;font-size:13px;}
+  .team-count{margin-left:auto;font-size:10.5px;color:var(--dim);font-family:var(--mono);}
+  .team-members{display:flex;flex-direction:column;gap:4px;margin-bottom:8px;}
+  .team-member{display:flex;align-items:center;gap:7px;font-size:12.5px;}
+  .avatar-dot{width:8px;height:8px;border-radius:50%;flex:none;}
+  .team-mname{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .leader-tag{
+    font-family:var(--mono);font-size:9px;text-transform:uppercase;letter-spacing:.06em;
+    color:var(--yellow);border:1px solid rgba(210,161,6,.5);border-radius:4px;padding:1px 5px;
+  }
+  .mini-btn{
+    font-family:var(--mono);font-size:9.5px;color:var(--dim);background:transparent;
+    border:1px solid var(--line);border-radius:4px;padding:2px 6px;cursor:pointer;
+  }
+  .mini-btn:hover{border-color:var(--cyan);color:var(--cyan);}
+  .mini-btn.danger:hover{border-color:var(--magenta);color:var(--magenta);}
+  .team-add{display:flex;gap:6px;margin-top:6px;}
+  .team-add select{flex:1;min-width:0;}
+  .team-ctl{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;}
+
+  /* Grade da escala */
+  .grid-wrap{
+    margin-top:18px;overflow-x:auto;background:var(--surface);border:1px solid var(--line);
+    border-radius:10px;box-shadow:0 4px 20px rgba(0,0,0,.35);
+  }
+  table{border-collapse:collapse;width:100%;font-family:var(--sans);font-size:11.5px;}
+  th,td{border:1px solid var(--line);text-align:center;vertical-align:top;padding:0;}
+  th{
+    background:var(--surface-2);color:var(--fg);font-weight:600;padding:10px 4px;
+    letter-spacing:.04em;font-size:12px;font-family:var(--mono);
+  }
+  th.weekend{color:var(--yellow);}
+  .time-col{
+    background:var(--surface-2);color:var(--dim);white-space:nowrap;padding:6px 12px;
+    font-size:11px;text-align:center;vertical-align:middle;font-weight:500;font-family:var(--mono);
+  }
+  .cell{
+    min-width:150px;min-height:52px;padding:5px;vertical-align:top;
+    transition:outline .1s,filter .15s;
+  }
+  .cell.addable{cursor:pointer;}
+  .cell.addable:hover{outline:2px solid var(--cyan);outline-offset:-2px;filter:brightness(1.12);}
+  .cell-empty{color:var(--dim);font-size:16px;line-height:33px;opacity:.35;}
+
+  .sched-chip{
+    display:flex;flex-direction:column;gap:2px;text-align:left;border-left:3px solid #888;
+    background:rgba(0,0,0,.32);border-radius:5px;padding:4px 16px 4px 6px;margin-bottom:4px;
+    position:relative;
+  }
+  .sched-chip.editable{cursor:grab;}
+  .sched-chip.editable:hover{background:rgba(61,219,217,.14);}
+  .sched-chip .drag-handle{
+    position:absolute;top:2px;right:3px;font-size:10px;line-height:1;color:var(--dim);
+    user-select:none;
+  }
+  .sched-chip.editable:hover .drag-handle{color:var(--cyan);}
+  body.dragging{cursor:grabbing;user-select:none;}
+  body.dragging .sched-chip{opacity:.55;}
+  .drag-hint{
+    position:fixed;z-index:2000;background:#1a1a1e;border:1px solid var(--cyan);color:var(--fg);
+    font-family:var(--mono);font-size:11px;padding:6px 10px;border-radius:6px;
+    pointer-events:none;display:none;box-shadow:0 8px 24px rgba(0,0,0,.6);
+  }
+  .sched-team{font-family:var(--mono);font-size:10px;font-weight:700;color:var(--fg);}
+  .sched-task{font-size:10.5px;color:var(--dim);word-break:break-word;}
+  .sched-status{
+    align-self:flex-start;font-family:var(--mono);font-size:8.5px;text-transform:uppercase;
+    letter-spacing:.05em;padding:1px 5px;border-radius:4px;border:1px solid var(--line);
+  }
+  .sched-status.st-planejado{color:var(--cyan);border-color:rgba(61,219,217,.5);}
+  .sched-status.st-em_andamento{color:var(--yellow);border-color:rgba(210,161,6,.5);}
+  .sched-status.st-concluido{color:var(--green);border-color:rgba(66,190,101,.5);}
+  .sched-warn{
+    align-self:flex-start;font-family:var(--mono);font-size:9px;color:var(--yellow);
+    background:rgba(210,161,6,.14);border-radius:4px;padding:1px 5px;
+  }
+
+  .legend{
+    display:flex;align-items:center;gap:14px;padding:10px 18px;font-family:var(--mono);
+    font-size:10.5px;color:var(--dim);flex-wrap:wrap;border-top:1px solid var(--line);background:var(--surface);
+  }
+  .legend .dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:4px;}
+
+  /* Modal */
+  .overlay{
+    position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;
+    z-index:1000;padding:20px;
+  }
+  .overlay.show{display:flex;}
+  #dialogOverlay{z-index:1500;}
+  .toast{
+    position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(20px);
+    background:#1a1a1e;border:1px solid var(--cyan);color:var(--fg);font-family:var(--mono);
+    font-size:12px;padding:10px 16px;border-radius:8px;box-shadow:0 10px 30px rgba(0,0,0,.6);
+    opacity:0;pointer-events:none;transition:opacity .18s, transform .18s;z-index:2100;max-width:90vw;text-align:center;
+  }
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+  .toast.toast-erro{border-color:var(--magenta);color:#ffd0e4;}
+  .modal{
+    background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:20px;
+    width:100%;max-width:440px;box-shadow:0 20px 60px rgba(0,0,0,.6);
+  }
+  .modal h3{font-family:var(--mono);font-size:13px;margin:0 0 14px;color:var(--cyan);}
+  .field{display:flex;flex-direction:column;gap:5px;margin-bottom:12px;}
+  .field label{font-family:var(--mono);font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--dim);}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  .modal-actions{display:flex;justify-content:space-between;gap:8px;margin-top:16px;}
+  .modal-actions .right{display:flex;gap:8px;}
+
+  .empty-state{text-align:center;padding:34px 20px;color:var(--dim);}
+  .empty-state p{font-size:14px;line-height:1.6;margin:0;}
+
+  footer{margin-top:30px;color:var(--dim);font-size:11px;font-family:var(--mono);text-align:center;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <p class="eyebrow"><a href="/workspace/{{ workspace.slug }}">&larr; {{ workspace.name }}</a> &middot; Escala</p>
+    <h1>Escala de trabalho por equipes</h1>
+    <p class="sub">Distribua os horários de trabalho de construção entre as equipes do workspace. O criador administra as equipes e os líderes; os demais integrantes acompanham a escala.</p>
+    <div class="disclaimer">
+      <b>Como funciona:</b> cada célula mostra qual <b>equipe</b> trabalha naquele dia e horário, com a <b>tarefa</b> e o <b>status</b>. Arraste o <b>⠿</b> de um bloco para <b>estendê-lo</b> por vários horários, ou arraste sobre células vazias para criar um <b>bloco grande</b> de uma vez. Ative o modo <b>🗑 Apagar blocos</b> para arrastar e apagar vários horários de uma vez. O sistema avisa quando algum integrante escalado tem <b>aula ou outro compromisso</b> no mesmo horário (marcado com ⚠), mas não impede a escala.
+    </div>
+  </header>
+
+  {% if members %}
+  <section class="panel" id="teamsPanel">
+    <div class="panel-head">
+      <h2>Equipes ({{ teams|length }})</h2>
+      <div class="row-flex">
+        <a class="btn" href="/workspace/{{ workspace.slug }}">Ver disponibilidade</a>
+        <a class="btn btn-primary" href="/api/workspace/{{ workspace.slug }}/schedule.csv" download>Baixar CSV da escala</a>
+      </div>
+    </div>
+    <div id="createTeamForm" class="create-team" hidden>
+      <input class="input" id="newTeamName" maxlength="60" placeholder="Nome da equipe (ex.: Fuselagem)" style="min-width:220px;">
+      <button class="btn btn-primary" id="btnCreateTeam">+ Criar equipe</button>
+    </div>
+    <div id="readOnlyNote" class="muted" hidden>Você pode visualizar a escala, mas apenas o criador e os líderes de equipe podem editá-la.</div>
+    <div class="teams" id="teamsBox"></div>
+  </section>
+
+  <section class="panel" style="padding:10px 16px;">
+    <div class="panel-head" style="margin-bottom:8px;">
+      <h2 style="margin:0;">Filtrar equipes na grade</h2>
+      <div class="row-flex">
+        <button class="btn" id="btnAllTeams">Todas</button>
+        <button class="btn" id="btnNoTeams">Nenhuma</button>
+        <button class="btn btn-filter" id="btnWeekend">Fim de semana</button>
+        <button class="btn btn-erase" id="btnErase" hidden>🗑 Apagar blocos</button>
+      </div>
+    </div>
+    <div class="row-flex" id="teamFilters"></div>
+  </section>
+
+  <section class="grid-wrap">
+    <table id="schedGrid"></table>
+    <div class="legend">
+      <span><span class="dot" style="background:var(--cyan)"></span>Planejado</span>
+      <span><span class="dot" style="background:var(--yellow)"></span>Em andamento</span>
+      <span><span class="dot" style="background:var(--green)"></span>Concluído</span>
+      <span style="color:var(--yellow)">⚠ conflito com aula/compromisso</span>
+      <span style="margin-left:auto;color:var(--cyan)" id="gridHint"></span>
+    </div>
+  </section>
+  {% else %}
+  <section class="panel">
+    <div class="empty-state">
+      <p style="font-size:16px;font-weight:600;color:var(--fg);margin-bottom:6px;">Nenhum integrante no workspace ainda</p>
+      <p>As equipes são formadas a partir dos integrantes. Envie os comprovantes de matrícula primeiro.</p>
+      <div style="display:flex;gap:10px;justify-content:center;margin-top:18px;">
+        <a class="btn btn-primary" href="/workspace/{{ workspace.slug }}/upload">+ Enviar PDF</a>
+      </div>
+    </div>
+  </section>
+  {% endif %}
+
+  <footer>
+    <a href="/" style="color:var(--dim);text-decoration:none;">NoTimeToRelax</a>
+  </footer>
+</div>
+
+<!-- Modal de entrada da escala -->
+<div class="overlay" id="entryOverlay">
+  <div class="modal">
+    <h3 id="modalTitle">Nova entrada na escala</h3>
+    <p class="muted" id="whenInfo" hidden style="margin:-6px 0 12px;"></p>
+    <div class="field">
+      <label for="mTeam">Equipe</label>
+      <select class="input" id="mTeam"></select>
+    </div>
+    <div class="grid2" id="whenFields">
+      <div class="field">
+        <label for="mDay">Dia</label>
+        <select class="input" id="mDay"></select>
+      </div>
+      <div class="field">
+        <label for="mSlot">Horário</label>
+        <select class="input" id="mSlot"></select>
+      </div>
+    </div>
+    <div class="field">
+      <label for="mTask">Tarefa / local (opcional)</label>
+      <input class="input" id="mTask" maxlength="200" placeholder="Ex.: montar cauda — Hangar 2">
+    </div>
+    <div class="field">
+      <label for="mStatus">Status</label>
+      <select class="input" id="mStatus"></select>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-danger" id="btnDeleteEntry" hidden>Apagar</button>
+      <div class="right">
+        <button class="btn" id="btnCancelEntry">Cancelar</button>
+        <button class="btn btn-primary" id="btnSaveEntry">Salvar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Diálogo de confirmação/prompt (substitui confirm/prompt nativos) -->
+<div class="overlay" id="dialogOverlay">
+  <div class="modal" role="dialog" aria-modal="true">
+    <h3 id="dialogTitle">Confirmar</h3>
+    <p class="muted" id="dialogMsg" style="margin:-6px 0 12px;"></p>
+    <input class="input" id="dialogInput" hidden style="width:100%;">
+    <div class="modal-actions">
+      <div class="right">
+        <button class="btn" id="dialogCancel">Cancelar</button>
+        <button class="btn btn-primary" id="dialogOk">Confirmar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="drag-hint" id="dragHint"></div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+{% if members %}
+<script>
+function esc(s){
+  return String(s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+const ALL_DAYS = ["Seg","Ter","Qua","Qui","Sex","Sáb","Dom"];
+const DAY_FULL = {"Seg":"Segunda-feira","Ter":"Terça-feira","Qua":"Quarta-feira","Qui":"Quinta-feira","Sex":"Sexta-feira","Sáb":"Sábado","Dom":"Domingo"};
+const SLOTS = [
+  "07:00-08:00","08:00-09:00","09:00-10:00","10:10-11:10","11:10-12:10",
+  "13:00-14:00","14:00-15:00","15:00-16:00","16:10-17:10","17:10-18:10",
+  "18:30-19:20","19:20-20:10","20:20-21:10","21:10-22:00"
+];
+const STATUS_ORDER = ["planejado","em_andamento","concluido"];
+const STATUS_META = {
+  planejado:    {label:"Planejado"},
+  em_andamento: {label:"Em andamento"},
+  concluido:    {label:"Concluído"},
+};
+
+const WORKSPACE = {{ workspace|tojson }};
+let MEMBERS = {{ members|tojson }};
+let TEAMS = {{ teams|tojson }};
+let SCHEDULE = {{ schedule|tojson }};
+const USER = {{ user|tojson }};
+const IS_OWNER = {{ is_owner|tojson }};
+let LEADING = new Set({{ leading_team_ids|tojson }});
+
+let selectedTeams = new Set(TEAMS.map(t => t.id));
+let showWeekend = SCHEDULE.some(e => e.day >= 5);
+let modalEntryId = null;
+let eraseMode = false;
+
+function teamById(id){ return TEAMS.find(t => t.id === id) || null; }
+function canManageTeam(id){ return IS_OWNER || LEADING.has(id); }
+function manageAny(){ return IS_OWNER || LEADING.size > 0; }
+function manageableTeams(){ return TEAMS.filter(t => canManageTeam(t.id)); }
+function getDays(){ return showWeekend ? ALL_DAYS : ALL_DAYS.slice(0,5); }
+
+async function api(url, opts){
+  try{
+    const r = await fetch(url, opts);
+    let data = null;
+    try{ data = await r.json(); }catch(e){}
+    return {ok:r.ok, status:r.status, data};
+  }catch(e){
+    return {ok:false, status:0, data:null};
+  }
+}
+const JSONHDR = {'Content-Type':'application/json'};
+
+// ─── Diálogo e aviso próprios (evita que o navegador bloqueie confirm/alert) ──
+
+function uiDialog(opts){
+  opts = opts || {};
+  return new Promise(resolve => {
+    const ov = document.getElementById('dialogOverlay');
+    const titleEl = document.getElementById('dialogTitle');
+    const msgEl = document.getElementById('dialogMsg');
+    const input = document.getElementById('dialogInput');
+    const ok = document.getElementById('dialogOk');
+    const cancel = document.getElementById('dialogCancel');
+    const isPrompt = opts.input !== undefined;
+
+    titleEl.textContent = opts.title || 'Confirmar';
+    msgEl.textContent = opts.message || '';
+    msgEl.hidden = !opts.message;
+    if(isPrompt){
+      input.hidden = false;
+      input.value = opts.input == null ? '' : String(opts.input);
+    } else {
+      input.hidden = true;
+      input.value = '';
+    }
+    ok.textContent = opts.okLabel || 'Confirmar';
+    ok.className = 'btn' + (opts.okClass || ' btn-primary') + (opts.danger ? ' btn-danger' : '');
+
+    function cleanup(val){
+      ov.classList.remove('show');
+      ok.onclick = null; cancel.onclick = null; ov.onclick = null;
+      input.onkeydown = null;
+      document.removeEventListener('keydown', onKey);
+      resolve(val);
+    }
+    function cancelVal(){ cleanup(isPrompt ? null : false); }
+    function confirmVal(){ cleanup(isPrompt ? input.value : true); }
+    function onKey(e){
+      if(e.key === 'Escape') cancelVal();
+      else if(e.key === 'Enter' && !isPrompt) confirmVal();
+    }
+    ok.onclick = confirmVal;
+    cancel.onclick = cancelVal;
+    ov.onclick = (e) => { if(e.target === ov) cancelVal(); };
+    input.onkeydown = (e) => { if(e.key === 'Enter') confirmVal(); };
+    document.addEventListener('keydown', onKey);
+    ov.classList.add('show');
+    if(isPrompt) setTimeout(() => { input.focus(); input.select(); }, 10);
+  });
+}
+function uiConfirm(message, opts){ return uiDialog(Object.assign({message}, opts || {})); }
+function uiPrompt(message, value, opts){ return uiDialog(Object.assign({message, input:value}, opts || {})); }
+
+let _toastTimer = null;
+function uiToast(msg, kind){
+  const t = document.getElementById('toast');
+  if(!t) return;
+  t.textContent = msg;
+  t.className = 'toast show' + (kind ? ' toast-' + kind : '');
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => { t.className = 'toast'; }, 3600);
+}
+
+async function refresh(){
+  const base = `/api/workspace/${WORKSPACE.slug}`;
+  const [t, s] = await Promise.all([api(`${base}/teams`), api(`${base}/schedule`)]);
+  if(t.ok && Array.isArray(t.data)) TEAMS = t.data;
+  if(s.ok && Array.isArray(s.data)) SCHEDULE = s.data;
+  const ids = new Set(TEAMS.map(x => x.id));
+  selectedTeams = new Set([...selectedTeams].filter(id => ids.has(id)));
+  if(!selectedTeams.size && TEAMS.length && !window.__filtersTouched) selectedTeams = ids;
+  renderAll();
+}
+
+function renderAll(){ renderTeams(); renderFilters(); renderGrid(); }
+
+// ─── Equipes ────────────────────────────────────────────────────────────────
+
+function renderTeams(){
+  const box = document.getElementById('teamsBox');
+  if(!box) return;
+  box.innerHTML = '';
+  document.getElementById('createTeamForm').hidden = !IS_OWNER;
+  document.getElementById('readOnlyNote').hidden = manageAny();
+
+  if(!TEAMS.length){
+    const p = document.createElement('p');
+    p.className = 'muted';
+    p.textContent = IS_OWNER
+      ? 'Nenhuma equipe criada ainda. Use o campo acima para criar a primeira.'
+      : 'Nenhuma equipe criada ainda.';
+    box.appendChild(p);
+    return;
+  }
+
+  TEAMS.forEach(t => {
+    const card = document.createElement('div');
+    card.className = 'team-card';
+
+    const head = document.createElement('div');
+    head.className = 'team-head';
+    const dot = document.createElement('span');
+    dot.className = 'team-dot';
+    dot.style.background = t.color;
+    const nm = document.createElement('span');
+    nm.className = 'team-name';
+    nm.textContent = t.name;
+    const count = document.createElement('span');
+    count.className = 'team-count';
+    count.textContent = `${t.members.length} integrante${t.members.length === 1 ? '' : 's'}`;
+    head.append(dot, nm, count);
+    card.appendChild(head);
+
+    const list = document.createElement('div');
+    list.className = 'team-members';
+    if(!t.members.length){
+      const p = document.createElement('span');
+      p.className = 'muted';
+      p.textContent = 'Sem integrantes';
+      list.appendChild(p);
+    }
+    t.members.forEach(m => {
+      const row = document.createElement('div');
+      row.className = 'team-member';
+      const md = document.createElement('span');
+      md.className = 'avatar-dot';
+      md.style.background = m.color;
+      const mn = document.createElement('span');
+      mn.className = 'team-mname';
+      mn.textContent = m.name + (USER && m.user_id === USER.id ? ' (você)' : '');
+      row.append(md, mn);
+      if(m.is_leader){
+        const tag = document.createElement('span');
+        tag.className = 'leader-tag';
+        tag.textContent = 'líder';
+        row.appendChild(tag);
+      }
+      if(canManageTeam(t.id)){
+        if(IS_OWNER){
+          const lb = document.createElement('button');
+          lb.className = 'mini-btn';
+          lb.textContent = m.is_leader ? 'remover líder' : 'tornar líder';
+          lb.onclick = () => setLeader(t.id, m.member_id, !m.is_leader);
+          row.appendChild(lb);
+        }
+        const rm = document.createElement('button');
+        rm.className = 'mini-btn danger';
+        rm.textContent = 'remover';
+        rm.onclick = () => removeMemberFromTeam(t.id, m.member_id, m.name);
+        row.appendChild(rm);
+      }
+      list.appendChild(row);
+    });
+    card.appendChild(list);
+
+    if(canManageTeam(t.id)){
+      const avail = MEMBERS.filter(m => !t.members.some(tm => tm.member_id === m.id));
+      const addRow = document.createElement('div');
+      addRow.className = 'team-add';
+      const sel = document.createElement('select');
+      sel.className = 'input';
+      const opt0 = document.createElement('option');
+      opt0.value = '';
+      opt0.textContent = avail.length ? 'Adicionar integrante…' : 'Todos já estão na equipe';
+      sel.appendChild(opt0);
+      avail.forEach(m => {
+        const o = document.createElement('option');
+        o.value = String(m.id);
+        o.textContent = m.name;
+        sel.appendChild(o);
+      });
+      sel.disabled = !avail.length;
+      const btn = document.createElement('button');
+      btn.className = 'btn';
+      btn.textContent = 'Adicionar';
+      btn.disabled = !avail.length;
+      btn.onclick = () => { if(sel.value) addMemberToTeam(t.id, Number(sel.value)); };
+      addRow.append(sel, btn);
+      card.appendChild(addRow);
+    }
+
+    if(IS_OWNER){
+      const ctl = document.createElement('div');
+      ctl.className = 'team-ctl';
+      const ren = document.createElement('button');
+      ren.className = 'mini-btn';
+      ren.textContent = 'renomear';
+      ren.onclick = () => renameTeam(t);
+      const del = document.createElement('button');
+      del.className = 'mini-btn danger';
+      del.textContent = 'apagar equipe';
+      del.onclick = () => removeTeam(t);
+      ctl.append(ren, del);
+      card.appendChild(ctl);
+    }
+
+    box.appendChild(card);
+  });
+}
+
+function renderFilters(){
+  const box = document.getElementById('teamFilters');
+  if(!box) return;
+  box.innerHTML = '';
+  if(!TEAMS.length){
+    const p = document.createElement('span');
+    p.className = 'muted';
+    p.textContent = 'Sem equipes para filtrar.';
+    box.appendChild(p);
+    return;
+  }
+  TEAMS.forEach(t => {
+    const b = document.createElement('button');
+    b.className = 'btn btn-filter' + (selectedTeams.has(t.id) ? ' active' : '');
+    const dot = document.createElement('span');
+    dot.className = 'avatar-dot';
+    dot.style.background = t.color;
+    b.appendChild(dot);
+    b.appendChild(document.createTextNode(' ' + t.name));
+    b.onclick = () => {
+      window.__filtersTouched = true;
+      selectedTeams.has(t.id) ? selectedTeams.delete(t.id) : selectedTeams.add(t.id);
+      renderFilters();
+      renderGrid();
+    };
+    box.appendChild(b);
+  });
+}
+
+function renderGrid(){
+  const table = document.getElementById('schedGrid');
+  if(!table) return;
+  table.innerHTML = '';
+  const days = getDays();
+
+  const thead = document.createElement('tr');
+  const th0 = document.createElement('th');
+  th0.className = 'time-col';
+  th0.textContent = 'Horário';
+  thead.appendChild(th0);
+  days.forEach(d => {
+    const th = document.createElement('th');
+    if(d === 'Sáb' || d === 'Dom') th.className = 'weekend';
+    th.textContent = d;
+    thead.appendChild(th);
+  });
+  table.appendChild(thead);
+
+  SLOTS.forEach((slotLabel, s) => {
+    const row = document.createElement('tr');
+    const timeTd = document.createElement('td');
+    timeTd.className = 'time-col';
+    timeTd.textContent = slotLabel;
+    row.appendChild(timeTd);
+
+    days.forEach(dayLabel => {
+      const d = ALL_DAYS.indexOf(dayLabel);
+      const td = document.createElement('td');
+      td.className = 'cell';
+      td.dataset.d = String(d);
+      td.dataset.s = String(s);
+      const entries = SCHEDULE.filter(e => e.day === d && e.slot === s && selectedTeams.has(e.team_id));
+
+      if(manageableTeams().length){
+        td.classList.add('addable');
+        td.title = 'Clique para adicionar, ou arraste para selecionar vários horários';
+        td.addEventListener('pointerdown', (ev) => onCellPointerDown(ev, d, s));
+      }
+
+      if(!entries.length){
+        const empty = document.createElement('div');
+        empty.className = 'cell-empty';
+        empty.textContent = '·';
+        td.appendChild(empty);
+      } else {
+        entries.forEach(e => td.appendChild(buildChip(e)));
+      }
+      row.appendChild(td);
+    });
+    table.appendChild(row);
+  });
+
+  const hint = document.getElementById('gridHint');
+  if(hint){
+    if(!manageableTeams().length){
+      hint.textContent = 'Somente leitura.';
+    } else if(eraseMode){
+      hint.textContent = '🗑 Modo apagar: arraste sobre os blocos para apagá-los.';
+      hint.style.color = 'var(--magenta)';
+    } else {
+      hint.textContent = 'Clique ou arraste células para escalar; arraste o ⠿ de um bloco para estendê-lo.';
+      hint.style.color = '';
+    }
+  }
+}
+
+function buildChip(e){
+  const team = teamById(e.team_id);
+  const chip = document.createElement('div');
+  chip.className = 'sched-chip st-' + e.status;
+  chip.style.borderLeftColor = team ? team.color : '#888';
+
+  const nm = document.createElement('span');
+  nm.className = 'sched-team';
+  nm.textContent = team ? team.name : 'Equipe removida';
+  chip.appendChild(nm);
+
+  if(e.task){
+    const tk = document.createElement('span');
+    tk.className = 'sched-task';
+    tk.textContent = e.task;
+    chip.appendChild(tk);
+  }
+
+  const st = document.createElement('span');
+  st.className = 'sched-status st-' + e.status;
+  st.textContent = (STATUS_META[e.status] || {label:e.status}).label;
+  chip.appendChild(st);
+
+  if(e.conflicts && e.conflicts.length){
+    const w = document.createElement('span');
+    w.className = 'sched-warn';
+    w.textContent = '⚠ ' + e.conflicts.length + ' em conflito';
+    w.title = 'Com aula/compromisso: ' + e.conflicts.map(c => c.name).join(', ');
+    chip.appendChild(w);
+  }
+
+  if(canManageTeam(e.team_id)){
+    chip.classList.add('editable');
+    chip.title = 'Clique para editar ou arraste o ⠿ para estender a vários horários';
+    const handle = document.createElement('span');
+    handle.className = 'drag-handle';
+    handle.textContent = '⠿';
+    chip.appendChild(handle);
+    chip.addEventListener('pointerdown', (ev) => onChipPointerDown(ev, e));
+  }
+  return chip;
+}
+
+// ─── Arrastar (estilo Excel) ────────────────────────────────────────────────
+
+let dragState = null;
+const dragHintEl = document.getElementById('dragHint');
+
+function visibleDays(){ return getDays(); }
+
+function rectCells(aD, aS, bD, bS){
+  const days = visibleDays();
+  const minD = Math.min(aD, bD), maxD = Math.max(aD, bD);
+  const minS = Math.min(aS, bS), maxS = Math.max(aS, bS);
+  const cells = [];
+  for(let d = minD; d <= maxD; d++){
+    if(!days.includes(ALL_DAYS[d])) continue;
+    for(let s = minS; s <= maxS; s++) cells.push([d, s]);
+  }
+  return cells;
+}
+
+function cellEl(d, s){
+  return document.querySelector(`td.cell[data-d="${d}"][data-s="${s}"]`);
+}
+
+function clearHighlights(){
+  document.querySelectorAll('td.cell.drop-target').forEach(td => td.classList.remove('drop-target'));
+}
+
+function paintHighlight(cells, mode){
+  clearHighlights();
+  cells.forEach(([d, s]) => {
+    const el = cellEl(d, s);
+    if(el){
+      el.classList.add('drop-target');
+      if(mode === 'erase') el.classList.add('erase');
+    }
+  });
+}
+
+function showDragHint(ev, text){
+  if(!dragHintEl) return;
+  dragHintEl.textContent = text;
+  dragHintEl.style.display = 'block';
+  const w = dragHintEl.offsetWidth || 160;
+  const h = dragHintEl.offsetHeight || 30;
+  let x = ev.clientX + 14;
+  let y = ev.clientY + 14;
+  if(x + w > window.innerWidth - 6) x = ev.clientX - w - 14;
+  if(x < 6) x = 6;
+  if(y + h > window.innerHeight - 6) y = ev.clientY - h - 14;
+  if(y < 6) y = 6;
+  dragHintEl.style.left = x + 'px';
+  dragHintEl.style.top = y + 'px';
+}
+
+function hideDragHint(){
+  if(dragHintEl) dragHintEl.style.display = 'none';
+}
+
+function startDrag(ev, state){
+  if(ev.button !== undefined && ev.button !== 0) return;
+  if(ev.pointerType !== 'touch') ev.preventDefault();
+  state.startX = ev.clientX;
+  state.startY = ev.clientY;
+  state.curD = state.anchorD;
+  state.curS = state.anchorS;
+  state.moved = false;
+  dragState = state;
+  window.addEventListener('pointermove', onDragMove);
+  window.addEventListener('pointerup', onDragEnd, {once:true});
+  window.addEventListener('pointercancel', onDragEnd, {once:true});
+}
+
+function onChipPointerDown(ev, entry){
+  // No modo apagar, deixa o evento subir para a célula iniciar a seleção de apagar.
+  if(eraseMode) return;
+  ev.stopPropagation();
+  if(!canManageTeam(entry.team_id)) return;
+  startDrag(ev, {
+    mode: 'paint',
+    entryId: entry.id,
+    anchorD: entry.day,
+    anchorS: entry.slot,
+    payload: {team_id: entry.team_id, task: entry.task, status: entry.status},
+  });
+}
+
+function onCellPointerDown(ev, d, s){
+  if(ev.target.closest('.sched-chip') && !eraseMode) return;
+  if(!manageableTeams().length) return;
+  startDrag(ev, {mode: eraseMode ? 'erase' : 'select', anchorD: d, anchorS: s});
+}
+
+function onDragMove(ev){
+  if(!dragState) return;
+  if(!dragState.moved){
+    const dx = ev.clientX - dragState.startX;
+    const dy = ev.clientY - dragState.startY;
+    if(Math.abs(dx) < 6 && Math.abs(dy) < 6) return;
+    dragState.moved = true;
+    document.body.classList.add('dragging');
+  }
+  const el = document.elementFromPoint(ev.clientX, ev.clientY);
+  const td = el && el.closest ? el.closest('td.cell') : null;
+  if(!td || td.dataset.d === undefined) return;
+  const d = Number(td.dataset.d), s = Number(td.dataset.s);
+  dragState.curD = d;
+  dragState.curS = s;
+  const cells = rectCells(dragState.anchorD, dragState.anchorS, d, s);
+  paintHighlight(cells, dragState.mode);
+  let acao = 'Selecionados';
+  if(dragState.mode === 'paint') acao = 'Estender para';
+  else if(dragState.mode === 'erase') acao = 'Apagar de';
+  showDragHint(ev, `${acao} ${cells.length} horário${cells.length === 1 ? '' : 's'}`);
+}
+
+function onDragEnd(ev){
+  window.removeEventListener('pointermove', onDragMove);
+  window.removeEventListener('pointerup', onDragEnd);
+  window.removeEventListener('pointercancel', onDragEnd);
+  const st = dragState;
+  dragState = null;
+  document.body.classList.remove('dragging');
+  clearHighlights();
+  hideDragHint();
+  if(!st) return;
+
+  if(!st.moved){
+    if(st.mode === 'paint'){
+      const e = SCHEDULE.find(x => x.id === st.entryId);
+      if(e) openEntryModal(e);
+    } else if(st.mode === 'erase'){
+      eraseCells([[st.anchorD, st.anchorS]]);
+    } else {
+      openBulkModal([[st.anchorD, st.anchorS]]);
+    }
+    return;
+  }
+
+  const cells = rectCells(st.anchorD, st.anchorS, st.curD, st.curS);
+  if(!cells.length) return;
+  if(st.mode === 'paint'){
+    bulkCreate(st.payload.team_id, st.payload.task, st.payload.status, cells);
+  } else if(st.mode === 'erase'){
+    eraseCells(cells);
+  } else {
+    openBulkModal(cells);
+  }
+}
+
+function entriesInCells(cells){
+  const keys = new Set(cells.map(([d, s]) => d + ',' + s));
+  return SCHEDULE.filter(e =>
+    keys.has(e.day + ',' + e.slot) &&
+    selectedTeams.has(e.team_id) &&
+    canManageTeam(e.team_id)
+  );
+}
+
+async function eraseCells(cells){
+  const alvo = entriesInCells(cells);
+  if(!alvo.length){
+    hideDragHint();
+    return;
+  }
+  const rotulo = alvo.length === 1 ? '1 entrada' : `${alvo.length} entradas`;
+  const ok = await uiConfirm(`Apagar ${rotulo} da escala?`, {
+    title: 'Apagar da escala', okLabel: 'Apagar', danger: true,
+  });
+  if(!ok) return;
+  const res = await api(`/api/workspace/${WORKSPACE.slug}/schedule/bulk-delete`, {
+    method:'POST', headers:JSONHDR, body:JSON.stringify({ids: alvo.map(e => e.id)})
+  });
+  if(!res.ok || (res.data && res.data.erro)){
+    uiToast((res.data && res.data.erro) || 'Não foi possível apagar.', 'erro');
+    return;
+  }
+  await refresh();
+  uiToast(`${rotulo} apagada${alvo.length === 1 ? '' : 's'}.`);
+}
+
+// ─── Modal ──────────────────────────────────────────────────────────────────
+
+const overlay = document.getElementById('entryOverlay');
+const mTeam = document.getElementById('mTeam');
+const mDay = document.getElementById('mDay');
+const mSlot = document.getElementById('mSlot');
+const mTask = document.getElementById('mTask');
+const mStatus = document.getElementById('mStatus');
+const btnDeleteEntry = document.getElementById('btnDeleteEntry');
+let modalCells = null;
+
+function fillSelect(sel, items){
+  sel.innerHTML = '';
+  items.forEach(it => {
+    const o = document.createElement('option');
+    o.value = String(it.value);
+    o.textContent = it.label;
+    sel.appendChild(o);
+  });
+}
+
+function conflictMsg(data){
+  const nomes = (data.conflicts || []).map(c => c.name).join(', ');
+  return `${nomes} têm aula/compromisso em horário(s) selecionado(s). Escalar mesmo assim?`;
+}
+
+function prepareModalFields(){
+  const options = manageableTeams().map(t => ({value:t.id, label:t.name}));
+  if(!options.length){
+    uiToast('Você ainda não pode editar nenhuma equipe.', 'erro');
+    return null;
+  }
+  fillSelect(mTeam, options);
+  fillSelect(mDay, ALL_DAYS.map((lbl, i) => ({value:i, label:DAY_FULL[lbl]})));
+  fillSelect(mSlot, SLOTS.map((lbl, i) => ({value:i, label:lbl})));
+  fillSelect(mStatus, STATUS_ORDER.map(s => ({value:s, label:STATUS_META[s].label})));
+  return options;
+}
+
+function openEntryModal(entry){
+  modalEntryId = entry.id;
+  modalCells = null;
+  const options = prepareModalFields();
+  if(!options) return;
+  document.getElementById('whenFields').hidden = false;
+  document.getElementById('whenInfo').hidden = true;
+  document.getElementById('modalTitle').textContent = 'Editar entrada da escala';
+  mTeam.value = String(entry.team_id);
+  mDay.value = String(entry.day);
+  mSlot.value = String(entry.slot);
+  mTask.value = entry.task || '';
+  mStatus.value = entry.status;
+  btnDeleteEntry.hidden = false;
+  overlay.classList.add('show');
+}
+
+function openBulkModal(cells){
+  modalEntryId = null;
+  modalCells = cells.slice();
+  const options = prepareModalFields();
+  if(!options) return;
+  document.getElementById('whenFields').hidden = true;
+  const info = document.getElementById('whenInfo');
+  if(cells.length === 1){
+    const [d, s] = cells[0];
+    info.textContent = `${DAY_FULL[ALL_DAYS[d]]} · ${SLOTS[s]}`;
+  } else {
+    const ds = cells.map(c => c[0]), ss = cells.map(c => c[1]);
+    const d0 = Math.min(...ds), d1 = Math.max(...ds);
+    const s0 = Math.min(...ss), s1 = Math.max(...ss);
+    info.textContent = `${ALL_DAYS[d0]} ${SLOTS[s0]} → ${ALL_DAYS[d1]} ${SLOTS[s1]} (${cells.length} horários)`;
+  }
+  info.hidden = false;
+  const n = cells.length;
+  document.getElementById('modalTitle').textContent =
+    n === 1 ? 'Nova entrada na escala' : `Novo bloco — ${n} horários`;
+  mTeam.value = String(options[0].value);
+  mTask.value = '';
+  mStatus.value = 'planejado';
+  btnDeleteEntry.hidden = true;
+  overlay.classList.add('show');
+}
+
+function closeModal(){
+  overlay.classList.remove('show');
+  modalEntryId = null;
+  modalCells = null;
+}
+
+async function saveEntry(){
+  if(!modalEntryId && !modalCells) return;
+  const team_id = Number(mTeam.value);
+  const task = mTask.value;
+  const status = mStatus.value;
+  const base = `/api/workspace/${WORKSPACE.slug}`;
+  let url, method, payload;
+  if(modalEntryId){
+    url = `${base}/schedule/${modalEntryId}`;
+    method = 'PATCH';
+    payload = {team_id, task, status, day:Number(mDay.value), slot:Number(mSlot.value)};
+  } else {
+    url = `${base}/schedule/bulk`;
+    method = 'POST';
+    payload = {team_id, task, status, cells: modalCells.slice()};
+  }
+
+  const btn = document.getElementById('btnSaveEntry');
+  btn.disabled = true;
+  let res = await api(url, {method, headers:JSONHDR, body:JSON.stringify(payload)});
+  if(res.status === 409 && res.data && res.data.needs_confirm){
+    if(await uiConfirm(conflictMsg(res.data), {title:'Conflito de horário', okLabel:'Escalar mesmo assim'})){
+      payload.force = true;
+      res = await api(url, {method, headers:JSONHDR, body:JSON.stringify(payload)});
+    } else {
+      btn.disabled = false;
+      return;
+    }
+  }
+  btn.disabled = false;
+  if(!res.ok || (res.data && res.data.erro)){
+    uiToast((res.data && res.data.erro) || 'Não foi possível salvar.', 'erro');
+    return;
+  }
+  closeModal();
+  await refresh();
+}
+
+async function bulkCreate(team_id, task, status, cells, force){
+  const payload = {team_id, task, status, cells, force: !!force};
+  const res = await api(`/api/workspace/${WORKSPACE.slug}/schedule/bulk`, {
+    method:'POST', headers:JSONHDR, body:JSON.stringify(payload)
+  });
+  if(res.status === 409 && res.data && res.data.needs_confirm){
+    if(await uiConfirm(conflictMsg(res.data), {title:'Conflito de horário', okLabel:'Escalar mesmo assim'})){
+      return bulkCreate(team_id, task, status, cells, true);
+    }
+    return;
+  }
+  if(!res.ok || (res.data && res.data.erro)){
+    uiToast((res.data && res.data.erro) || 'Não foi possível salvar o bloco.', 'erro');
+    return;
+  }
+  await refresh();
+}
+
+async function deleteEntry(){
+  if(!modalEntryId) return;
+  if(!await uiConfirm('Apagar esta entrada da escala?', {title:'Apagar entrada', okLabel:'Apagar', danger:true})) return;
+  const res = await api(`/api/workspace/${WORKSPACE.slug}/schedule/${modalEntryId}`, {method:'DELETE'});
+  if(!res.ok || (res.data && res.data.erro)){
+    uiToast((res.data && res.data.erro) || 'Não foi possível apagar.', 'erro');
+    return;
+  }
+  closeModal();
+  await refresh();
+  uiToast('Entrada apagada.');
+}
+
+// ─── Ações de equipe ────────────────────────────────────────────────────────
+
+async function createTeam(){
+  const input = document.getElementById('newTeamName');
+  const name = input.value.trim();
+  if(!name){ uiToast('Informe o nome da equipe.', 'erro'); return; }
+  const res = await api(`/api/workspace/${WORKSPACE.slug}/teams`, {
+    method:'POST', headers:JSONHDR, body:JSON.stringify({name})
+  });
+  if(!res.ok || (res.data && res.data.erro)){
+    uiToast((res.data && res.data.erro) || 'Não foi possível criar a equipe.', 'erro');
+    return;
+  }
+  input.value = '';
+  if(res.data && res.data.id) selectedTeams.add(res.data.id);
+  await refresh();
+  uiToast(`Equipe "${name}" criada.`);
+}
+
+async function renameTeam(team){
+  const name = await uiPrompt('Novo nome da equipe', team.name, {title:'Renomear equipe', okLabel:'Salvar'});
+  if(name === null) return;
+  if(!name.trim()){ uiToast('Nome inválido.', 'erro'); return; }
+  const res = await api(`/api/workspace/${WORKSPACE.slug}/teams/${team.id}`, {
+    method:'PATCH', headers:JSONHDR, body:JSON.stringify({name:name.trim()})
+  });
+  if(!res.ok || (res.data && res.data.erro)){ uiToast((res.data&&res.data.erro)||'Erro ao renomear.', 'erro'); return; }
+  await refresh();
+}
+
+async function removeTeam(team){
+  if(!await uiConfirm(`Apagar a equipe "${team.name}"? As entradas da escala dela também serão removidas.`, {title:'Apagar equipe', okLabel:'Apagar', danger:true})) return;
+  const res = await api(`/api/workspace/${WORKSPACE.slug}/teams/${team.id}`, {method:'DELETE'});
+  if(!res.ok || (res.data && res.data.erro)){ uiToast((res.data&&res.data.erro)||'Erro ao apagar.', 'erro'); return; }
+  selectedTeams.delete(team.id);
+  await refresh();
+  uiToast(`Equipe "${team.name}" apagada.`);
+}
+
+async function addMemberToTeam(teamId, memberId){
+  const res = await api(`/api/workspace/${WORKSPACE.slug}/teams/${teamId}/members`, {
+    method:'POST', headers:JSONHDR, body:JSON.stringify({member_id:memberId})
+  });
+  if(!res.ok || (res.data && res.data.erro)){ uiToast((res.data&&res.data.erro)||'Erro ao adicionar.', 'erro'); return; }
+  await refresh();
+}
+
+async function removeMemberFromTeam(teamId, memberId, name){
+  if(!await uiConfirm(`Remover ${name} da equipe?`, {title:'Remover integrante', okLabel:'Remover', danger:true})) return;
+  const res = await api(`/api/workspace/${WORKSPACE.slug}/teams/${teamId}/members/${memberId}`, {method:'DELETE'});
+  if(!res.ok || (res.data && res.data.erro)){ uiToast((res.data&&res.data.erro)||'Erro ao remover.', 'erro'); return; }
+  await refresh();
+}
+
+async function setLeader(teamId, memberId, isLeader){
+  const res = await api(`/api/workspace/${WORKSPACE.slug}/teams/${teamId}/leaders/${memberId}`, {
+    method:'PATCH', headers:JSONHDR, body:JSON.stringify({is_leader:isLeader})
+  });
+  if(!res.ok || (res.data && res.data.erro)){ uiToast((res.data&&res.data.erro)||'Erro ao alterar líder.', 'erro'); return; }
+  await refresh();
+}
+
+// ─── Eventos ────────────────────────────────────────────────────────────────
+
+document.getElementById('btnCreateTeam')?.addEventListener('click', createTeam);
+document.getElementById('newTeamName')?.addEventListener('keydown', e => { if(e.key === 'Enter') createTeam(); });
+document.getElementById('btnSaveEntry')?.addEventListener('click', saveEntry);
+document.getElementById('btnDeleteEntry')?.addEventListener('click', deleteEntry);
+document.getElementById('btnCancelEntry')?.addEventListener('click', closeModal);
+overlay?.addEventListener('click', e => { if(e.target === overlay) closeModal(); });
+document.addEventListener('keydown', e => { if(e.key === 'Escape') closeModal(); });
+
+document.getElementById('btnAllTeams')?.addEventListener('click', () => {
+  window.__filtersTouched = true;
+  selectedTeams = new Set(TEAMS.map(t => t.id));
+  renderFilters(); renderGrid();
+});
+document.getElementById('btnNoTeams')?.addEventListener('click', () => {
+  window.__filtersTouched = true;
+  selectedTeams = new Set();
+  renderFilters(); renderGrid();
+});
+document.getElementById('btnWeekend')?.addEventListener('click', (ev) => {
+  showWeekend = !showWeekend;
+  ev.currentTarget.classList.toggle('active', showWeekend);
+  renderGrid();
+});
+
+if(document.getElementById('btnWeekend')){
+  document.getElementById('btnWeekend').classList.toggle('active', showWeekend);
+}
+
+const btnErase = document.getElementById('btnErase');
+if(btnErase){
+  btnErase.hidden = !manageableTeams().length;
+  btnErase.addEventListener('click', () => setEraseMode(!eraseMode));
+}
+
+function setEraseMode(on){
+  eraseMode = !!on;
+  document.body.classList.toggle('erasing', eraseMode);
+  if(btnErase){
+    btnErase.classList.toggle('active', eraseMode);
+    btnErase.hidden = !manageableTeams().length;
+  }
+  renderGrid();
+}
+
+document.addEventListener('keydown', e => {
+  if(e.key === 'Escape' && eraseMode) setEraseMode(false);
+});
+
+renderAll();
+</script>
+{% endif %}
+</body>
+</html>
