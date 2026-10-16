@@ -1175,6 +1175,7 @@ async function createTeam(){
     selectedTeams.add(res.data.id);
     upsertTeam(res.data);
     renderTeams();
+    renderFilters();
     renderGrid();
   }
   uiToast(`Equipe "${name}" criada.`);
@@ -1190,6 +1191,7 @@ async function renameTeam(team){
   if(!res.ok || (res.data && res.data.erro)){ uiToast((res.data&&res.data.erro)||'Erro ao renomear.', 'erro'); return; }
   upsertTeam(res.data);
   renderTeams();
+  renderFilters();
   renderGrid();
 }
 
@@ -1199,6 +1201,7 @@ async function removeTeam(team){
   if(!res.ok || (res.data && res.data.erro)){ uiToast((res.data&&res.data.erro)||'Erro ao apagar.', 'erro'); return; }
   removeTeamLocal(team.id);
   renderTeams();
+  renderFilters();
   renderGrid();
   uiToast(`Equipe "${team.name}" apagada.`);
 }
