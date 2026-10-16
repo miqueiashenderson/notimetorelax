@@ -17,9 +17,10 @@ from database import (
     get_teams, get_team, create_team, update_team, delete_team,
     get_team_members, get_workspace_team_members, add_team_member,
     remove_team_member, set_team_leader, is_team_leader, get_leading_team_ids,
-    get_schedule_entries, get_schedule_entry, add_schedule_entry,
+    get_schedule_entries, get_schedule_entries_por_equipe, get_schedule_entry, add_schedule_entry,
     add_schedule_entries_bulk, update_schedule_entry, delete_schedule_entry,
     delete_schedule_entries_bulk, SCHEDULE_STATUSES,
+    carregar_snapshot_workspace,
 )
 from extractor import extrair_de_pdf_bytes, title_case, SLOTS
 
@@ -59,7 +60,13 @@ _db_ready = False
 def _ensure_db():
     global _db_ready
     if not _db_ready:
-        init_db()
+        # Verifica se a tabela workspaces já existe antes de rodar init_db
+        from sqlalchemy import inspect as sa_inspect
+        from database import get_engine
+        engine = get_engine()
+        inspector = sa_inspect(engine)
+        if "workspaces" not in inspector.get_table_names():
+            init_db()
         _db_ready = True
 
 
@@ -201,18 +208,21 @@ def _redirect_url(path: str, erro: str = "") -> str:
 _VALID_COLOR = re.compile(r"^#[0-9a-fA-F]{6}$")
 
 
-def _teams_payload(ws) -> list:
+def _teams_payload(ws, snapshot=None) -> list:
     """Equipes do workspace com seus integrantes (e marcação de líder)."""
-    members = {m.id: m for m in get_members(ws.id)}
+    if snapshot is None:
+        members_dict, team_members_list, teams_list, _ = carregar_snapshot_workspace(ws.id)
+    else:
+        members_dict, team_members_list, teams_list, _ = snapshot
     by_team: dict[int, list] = {}
-    for tm in get_workspace_team_members(ws.id):
-        if tm.member_id in members:
+    for tm in team_members_list:
+        if tm.member_id in members_dict:
             by_team.setdefault(tm.team_id, []).append(tm)
     out = []
-    for t in get_teams(ws.id):
+    for t in teams_list:
         tms = []
         for tm in by_team.get(t.id, []):
-            m = members[tm.member_id]
+            m = members_dict[tm.member_id]
             tms.append({
                 "member_id": m.id,
                 "name": m.name,
@@ -227,18 +237,22 @@ def _teams_payload(ws) -> list:
     return out
 
 
-def _schedule_payload(ws) -> list:
+def _schedule_payload(ws, snapshot=None, busy=None) -> list:
     """Entradas da escala com os conflitos (integrantes ocupados) de cada uma."""
-    members = {m.id: m for m in get_members(ws.id)}
-    busy = {mid: {(b[0], b[1]) for b in m.get_all_busy()} for mid, m in members.items()}
+    if snapshot is None:
+        members_dict, team_members_list, _, schedule_entries_list = carregar_snapshot_workspace(ws.id)
+    else:
+        members_dict, team_members_list, _, schedule_entries_list = snapshot
+    if busy is None:
+        busy = _busy_por_membro(members_dict)
     team_members: dict[int, list] = {}
-    for tm in get_workspace_team_members(ws.id):
+    for tm in team_members_list:
         team_members.setdefault(tm.team_id, []).append(tm.member_id)
     out = []
-    for e in get_schedule_entries(ws.id):
+    for e in schedule_entries_list:
         conflitos = []
         for mid in team_members.get(e.team_id, []):
-            m = members.get(mid)
+            m = members_dict.get(mid)
             if m and (e.day, e.slot) in busy.get(mid, set()):
                 conflitos.append({"id": m.id, "name": m.name})
         d = e.to_dict()
@@ -276,21 +290,30 @@ def _load_authed_ws(request: Request, slug: str):
     return ws, None
 
 
-def _conflicts_for_cells(ws, team_id: int, cells) -> dict:
+def _busy_por_membro(members_dict) -> dict:
+    """Calcula o conjunto de horários ocupados (busy) de cada membro uma única vez.
+    Retorna {member_id: set((dia, slot))}."""
+    return {
+        mid: {(b[0], b[1]) for b in m.get_all_busy()}
+        for mid, m in members_dict.items()
+    }
+
+
+def _conflicts_for_cells(ws, team_id: int, cells, busy=None) -> dict:
     """Conflitos de VÁRIAS células de uma equipe em uma só passada ao banco.
 
-    Busca os membros e os integrantes da equipe uma única vez e avalia todas as
+    Busca apenas os integrantes da equipe (filtro por team_id) e avalia todas as
     células em memória. Retorna {(dia, slot): [{"id", "name"}, ...]}.
     """
     cells = list(cells)
     if not cells:
         return {}
-    members = {m.id: m for m in get_members(ws.id)}
     team_members = get_team_members(team_id)
-    busy = {
-        mid: {(b[0], b[1]) for b in m.get_all_busy()}
-        for mid, m in members.items()
-    }
+    member_ids = {tm.member_id for tm in team_members}
+    # Busca apenas os membros que são integrantes da equipe
+    members = {m.id: m for m in get_members(ws.id) if m.id in member_ids}
+    if busy is None:
+        busy = _busy_por_membro(members)
     out: dict = {}
     for (d, s) in cells:
         key = (d, s)
@@ -334,6 +357,54 @@ _ERRO_GENERICO_PAGE = (
     "<p>Algo deu errado. Tente novamente em instantes.</p>"
     "</body></html>"
 )
+
+
+import contextvars
+
+_query_count_var = contextvars.ContextVar("query_count", default=None)
+_perf_log_installed = False
+
+
+def _habilitar_perf_log():
+    global _perf_log_installed
+    if _perf_log_installed:
+        return
+    try:
+        from sqlalchemy import event
+        from database import get_engine
+        eng = get_engine()
+
+        @event.listens_for(eng, "before_cursor_execute")
+        def _contar(conn, cursor, statement, params, context, executemany):
+            cnt = _query_count_var.get()
+            if cnt is not None:
+                cnt[0] += 1
+
+        _perf_log_installed = True
+    except Exception as e:
+        logger.warning(f"Não foi possível instalar contador de queries: {e}")
+
+
+@app.middleware("http")
+async def perf_logging_middleware(request: Request, call_next):
+    if os.environ.get("PERF_LOG", "").strip().lower() not in {"1", "true", "yes"}:
+        return await call_next(request)
+    _habilitar_perf_log()
+    counter = [0]
+    token = _query_count_var.set(counter)
+    t0 = time.perf_counter()
+    status_code = 500
+    try:
+        response = await call_next(request)
+        status_code = response.status_code
+        return response
+    finally:
+        dur_ms = (time.perf_counter() - t0) * 1000
+        queries = counter[0]
+        _query_count_var.reset(token)
+        logger.info(
+            f"[PERF] {request.method} {request.url.path} -> {status_code} ({dur_ms:.1f}ms, {queries} queries)"
+        )
 
 
 @app.middleware("http")
@@ -509,6 +580,7 @@ async def dashboard(request: Request, slug: str):
             "workspace": ws.to_dict(),
             "members": [m.to_dict() for m in members],
             "user": user.to_dict() if user else None,
+            "slots": SLOTS,
         },
     )
 
@@ -567,18 +639,21 @@ async def escala_page(request: Request, slug: str):
         return RedirectResponse(url=f"/workspace/{slug}/login", status_code=302)
     user = _get_current_user(request)
     uid = user.id if user else None
+    snapshot = carregar_snapshot_workspace(ws.id)
+    members_dict = snapshot[0]
     response = templates.TemplateResponse(
         request=request,
         name="escala.html",
         context={
             "workspace": ws.to_dict(),
-            "members": [m.to_dict() for m in get_members(ws.id)],
-            "teams": _teams_payload(ws),
-            "schedule": _schedule_payload(ws),
+            "members": [m.to_dict() for m in members_dict.values()],
+            "teams": _teams_payload(ws, snapshot),
+            "schedule": _schedule_payload(ws, snapshot),
             "status_labels": STATUS_LABELS,
             "user": user.to_dict() if user else None,
             "is_owner": bool(uid and ws.owner_id == uid),
             "leading_team_ids": sorted(get_leading_team_ids(ws.id, uid)) if uid else [],
+            "slots": SLOTS,
         },
     )
     # Evita que o navegador sirva uma versão antiga da página (JS/CSS) após
@@ -696,6 +771,9 @@ async def api_upload(
     if not file.filename or not file.filename.lower().endswith(".pdf"):
         return JSONResponse({"erro": "Apenas arquivos PDF são aceitos."}, status_code=400)
 
+    if file.size and file.size > 10 * 1024 * 1024:
+        return JSONResponse({"erro": "Arquivo muito grande. Máximo 10 MB."}, status_code=400)
+
     try:
         content = await file.read()
         if len(content) > 10 * 1024 * 1024:
@@ -722,7 +800,8 @@ async def api_upload(
 
         return JSONResponse(member.to_dict())
 
-    except Exception as e:
+    except Exception:
+        logger.exception("Falha no upload do PDF")
         return JSONResponse({"erro": "Erro interno ao processar o arquivo."}, status_code=500)
 
 
@@ -1088,12 +1167,16 @@ async def api_add_schedule_bulk(request: Request, slug: str):
         return JSONResponse({"erro": "Horários inválidos."}, status_code=400)
 
     existing = {
-        (e.day, e.slot) for e in get_schedule_entries(ws.id) if e.team_id == team_id
+        (e.day, e.slot) for e in get_schedule_entries_por_equipe(ws.id, team_id)
     }
     new_cells = sorted(c for c in cells if c not in existing)
 
+    # Calcula busy uma vez e reutiliza em _conflicts_for_cells
+    members_dict = {m.id: m for m in get_members(ws.id)}
+    busy = _busy_por_membro(members_dict)
+
     # Conflitos de todas as células em uma só passada ao banco.
-    conflict_map = _conflicts_for_cells(ws, team_id, new_cells)
+    conflict_map = _conflicts_for_cells(ws, team_id, new_cells, busy=busy)
     conflicts_map: dict[int, dict] = {}
     for conflitos in conflict_map.values():
         for c in conflitos:

@@ -346,11 +346,7 @@ function esc(s){
 
 const ALL_DAYS = ["Seg","Ter","Qua","Qui","Sex","Sáb","Dom"];
 const DAY_FULL = {"Seg":"Segunda-feira","Ter":"Terça-feira","Qua":"Quarta-feira","Qui":"Quinta-feira","Sex":"Sexta-feira","Sáb":"Sábado","Dom":"Domingo"};
-const SLOTS = [
-  "07:00-08:00","08:00-09:00","09:00-10:00","10:10-11:10","11:10-12:10",
-  "13:00-14:00","14:00-15:00","15:00-16:00","16:10-17:10","17:10-18:10",
-  "18:30-19:20","19:20-20:10","20:20-21:10","21:10-22:00"
-];
+const SLOTS = {{ (slots if slots is defined else []) | tojson }};
 const STATUS_ORDER = ["planejado","em_andamento","concluido"];
 const STATUS_META = {
   planejado:    {label:"Planejado"},
@@ -473,6 +469,19 @@ function upsertEntries(novas){
 function removeEntries(ids){
   const s = new Set(ids);
   SCHEDULE = SCHEDULE.filter(e => !s.has(e.id));
+}
+
+// Atualiza TEAMS localmente a partir do payload de uma equipe (POST/PATCH).
+function upsertTeam(team){
+  if(!team || team.id == null) return;
+  const idx = TEAMS.findIndex(t => t.id === team.id);
+  if(idx >= 0) TEAMS[idx] = team;
+  else TEAMS.push(team);
+}
+function removeTeamLocal(teamId){
+  TEAMS = TEAMS.filter(t => t.id !== teamId);
+  selectedTeams.delete(teamId);
+  SCHEDULE = SCHEDULE.filter(e => e.team_id !== teamId);
 }
 
 // ─── Equipes ────────────────────────────────────────────────────────────────
@@ -631,8 +640,23 @@ function renderFilters(){
 function renderGrid(){
   const table = document.getElementById('schedGrid');
   if(!table) return;
+  CELL_MAP.clear();
   table.innerHTML = '';
   const days = getDays();
+  const canManageAny = manageableTeams().length > 0;
+
+  const porCelula = new Map();
+  for(let i = 0; i < SCHEDULE.length; i++){
+    const e = SCHEDULE[i];
+    if(!selectedTeams.has(e.team_id)) continue;
+    const k = `${e.day},${e.slot}`;
+    let list = porCelula.get(k);
+    if(!list){
+      list = [];
+      porCelula.set(k, list);
+    }
+    list.push(e);
+  }
 
   const thead = document.createElement('tr');
   const th0 = document.createElement('th');
@@ -660,12 +684,12 @@ function renderGrid(){
       td.className = 'cell';
       td.dataset.d = String(d);
       td.dataset.s = String(s);
-      const entries = SCHEDULE.filter(e => e.day === d && e.slot === s && selectedTeams.has(e.team_id));
+      CELL_MAP.set(`${d},${s}`, td);
+      const entries = porCelula.get(`${d},${s}`) || [];
 
-      if(manageableTeams().length){
+      if(canManageAny){
         td.classList.add('addable');
         td.title = 'Clique para adicionar, ou arraste para selecionar vários horários';
-        td.addEventListener('pointerdown', (ev) => onCellPointerDown(ev, d, s));
       }
 
       if(!entries.length){
@@ -683,7 +707,7 @@ function renderGrid(){
 
   const hint = document.getElementById('gridHint');
   if(hint){
-    if(!manageableTeams().length){
+    if(!canManageAny){
       hint.textContent = 'Somente leitura.';
     } else if(eraseMode){
       hint.textContent = '🗑 Modo apagar: arraste sobre os blocos para apagá-los.';
@@ -728,12 +752,12 @@ function buildChip(e){
 
   if(canManageTeam(e.team_id)){
     chip.classList.add('editable');
+    chip.dataset.entryId = String(e.id);
     chip.title = 'Clique para editar ou arraste o ⠿ para estender a vários horários';
     const handle = document.createElement('span');
     handle.className = 'drag-handle';
     handle.textContent = '⠿';
     chip.appendChild(handle);
-    chip.addEventListener('pointerdown', (ev) => onChipPointerDown(ev, e));
   }
   return chip;
 }
@@ -742,6 +766,11 @@ function buildChip(e){
 
 let dragState = null;
 const dragHintEl = document.getElementById('dragHint');
+const CELL_MAP = new Map();
+let lastHighlighted = [];
+let dragRafId = null;
+let lastDragEv = null;
+let hintSize = null;
 
 function visibleDays(){ return getDays(); }
 
@@ -758,41 +787,49 @@ function rectCells(aD, aS, bD, bS){
 }
 
 function cellEl(d, s){
-  return document.querySelector(`td.cell[data-d="${d}"][data-s="${s}"]`);
+  return CELL_MAP.get(`${d},${s}`) || document.querySelector(`td.cell[data-d="${d}"][data-s="${s}"]`);
 }
 
 function clearHighlights(){
-  document.querySelectorAll('td.cell.drop-target').forEach(td => td.classList.remove('drop-target'));
+  if(lastHighlighted.length){
+    for(let i = 0; i < lastHighlighted.length; i++){
+      lastHighlighted[i].classList.remove('drop-target', 'erase');
+    }
+    lastHighlighted = [];
+  }
 }
 
 function paintHighlight(cells, mode){
   clearHighlights();
-  cells.forEach(([d, s]) => {
-    const el = cellEl(d, s);
+  for(let i = 0; i < cells.length; i++){
+    const el = cellEl(cells[i][0], cells[i][1]);
     if(el){
       el.classList.add('drop-target');
       if(mode === 'erase') el.classList.add('erase');
+      lastHighlighted.push(el);
     }
-  });
+  }
 }
 
 function showDragHint(ev, text){
   if(!dragHintEl) return;
   dragHintEl.textContent = text;
   dragHintEl.style.display = 'block';
-  const w = dragHintEl.offsetWidth || 160;
-  const h = dragHintEl.offsetHeight || 30;
+  if(!hintSize){
+    hintSize = { w: dragHintEl.offsetWidth || 160, h: dragHintEl.offsetHeight || 30 };
+  }
   let x = ev.clientX + 14;
   let y = ev.clientY + 14;
-  if(x + w > window.innerWidth - 6) x = ev.clientX - w - 14;
+  if(x + hintSize.w > window.innerWidth - 6) x = ev.clientX - hintSize.w - 14;
   if(x < 6) x = 6;
-  if(y + h > window.innerHeight - 6) y = ev.clientY - h - 14;
+  if(y + hintSize.h > window.innerHeight - 6) y = ev.clientY - hintSize.h - 14;
   if(y < 6) y = 6;
   dragHintEl.style.left = x + 'px';
   dragHintEl.style.top = y + 'px';
 }
 
 function hideDragHint(){
+  hintSize = null;
   if(dragHintEl) dragHintEl.style.display = 'none';
 }
 
@@ -810,28 +847,46 @@ function startDrag(ev, state){
   window.addEventListener('pointercancel', onDragEnd, {once:true});
 }
 
-function onChipPointerDown(ev, entry){
-  // No modo apagar, deixa o evento subir para a célula iniciar a seleção de apagar.
-  if(eraseMode) return;
-  ev.stopPropagation();
-  if(!canManageTeam(entry.team_id)) return;
-  startDrag(ev, {
-    mode: 'paint',
-    entryId: entry.id,
-    anchorD: entry.day,
-    anchorS: entry.slot,
-    payload: {team_id: entry.team_id, task: entry.task, status: entry.status},
-  });
-}
+function onGridPointerDown(ev){
+  if(ev.button !== undefined && ev.button !== 0) return;
+  const chipEl = ev.target.closest('.sched-chip.editable');
+  if(chipEl && !eraseMode){
+    const entryId = Number(chipEl.dataset.entryId);
+    const entry = SCHEDULE.find(x => x.id === entryId);
+    if(entry && canManageTeam(entry.team_id)){
+      ev.stopPropagation();
+      startDrag(ev, {
+        mode: 'paint',
+        entryId: entry.id,
+        anchorD: entry.day,
+        anchorS: entry.slot,
+        payload: {team_id: entry.team_id, task: entry.task, status: entry.status},
+      });
+      return;
+    }
+  }
 
-function onCellPointerDown(ev, d, s){
-  if(ev.target.closest('.sched-chip') && !eraseMode) return;
-  if(!manageableTeams().length) return;
-  startDrag(ev, {mode: eraseMode ? 'erase' : 'select', anchorD: d, anchorS: s});
+  const td = ev.target.closest('td.cell');
+  if(td && td.dataset.d !== undefined && td.dataset.s !== undefined){
+    if(ev.target.closest('.sched-chip') && !eraseMode) return;
+    if(!manageableTeams().length) return;
+    const d = Number(td.dataset.d);
+    const s = Number(td.dataset.s);
+    startDrag(ev, {mode: eraseMode ? 'erase' : 'select', anchorD: d, anchorS: s});
+  }
 }
 
 function onDragMove(ev){
-  if(!dragState) return;
+  lastDragEv = ev;
+  if(!dragRafId){
+    dragRafId = requestAnimationFrame(processDragMove);
+  }
+}
+
+function processDragMove(){
+  dragRafId = null;
+  const ev = lastDragEv;
+  if(!dragState || !ev) return;
   if(!dragState.moved){
     const dx = ev.clientX - dragState.startX;
     const dy = ev.clientY - dragState.startY;
@@ -843,6 +898,14 @@ function onDragMove(ev){
   const td = el && el.closest ? el.closest('td.cell') : null;
   if(!td || td.dataset.d === undefined) return;
   const d = Number(td.dataset.d), s = Number(td.dataset.s);
+  if(dragState.curD === d && dragState.curS === s){
+    let acao = 'Selecionados';
+    if(dragState.mode === 'paint') acao = 'Estender para';
+    else if(dragState.mode === 'erase') acao = 'Apagar de';
+    const count = rectCells(dragState.anchorD, dragState.anchorS, d, s).length;
+    showDragHint(ev, `${acao} ${count} horário${count === 1 ? '' : 's'}`);
+    return;
+  }
   dragState.curD = d;
   dragState.curS = s;
   const cells = rectCells(dragState.anchorD, dragState.anchorS, d, s);
@@ -854,6 +917,11 @@ function onDragMove(ev){
 }
 
 function onDragEnd(ev){
+  if(dragRafId){
+    cancelAnimationFrame(dragRafId);
+    dragRafId = null;
+  }
+  lastDragEv = null;
   window.removeEventListener('pointermove', onDragMove);
   window.removeEventListener('pointerup', onDragEnd);
   window.removeEventListener('pointercancel', onDragEnd);
@@ -1099,8 +1167,13 @@ async function createTeam(){
     return;
   }
   input.value = '';
-  if(res.data && res.data.id) selectedTeams.add(res.data.id);
-  await refresh();
+  if(res.data && res.data.id){
+    selectedTeams.add(res.data.id);
+    upsertTeam(res.data);
+    renderTeams();
+    renderFilters();
+    renderGrid();
+  }
   uiToast(`Equipe "${name}" criada.`);
 }
 
@@ -1112,15 +1185,20 @@ async function renameTeam(team){
     method:'PATCH', headers:JSONHDR, body:JSON.stringify({name:name.trim()})
   });
   if(!res.ok || (res.data && res.data.erro)){ uiToast((res.data&&res.data.erro)||'Erro ao renomear.', 'erro'); return; }
-  await refresh();
+  upsertTeam(res.data);
+  renderTeams();
+  renderFilters();
+  renderGrid();
 }
 
 async function removeTeam(team){
   if(!await uiConfirm(`Apagar a equipe "${team.name}"? As entradas da escala dela também serão removidas.`, {title:'Apagar equipe', okLabel:'Apagar', danger:true})) return;
   const res = await api(`/api/workspace/${WORKSPACE.slug}/teams/${team.id}`, {method:'DELETE'});
   if(!res.ok || (res.data && res.data.erro)){ uiToast((res.data&&res.data.erro)||'Erro ao apagar.', 'erro'); return; }
-  selectedTeams.delete(team.id);
-  await refresh();
+  removeTeamLocal(team.id);
+  renderTeams();
+  renderFilters();
+  renderGrid();
   uiToast(`Equipe "${team.name}" apagada.`);
 }
 
@@ -1129,14 +1207,23 @@ async function addMemberToTeam(teamId, memberId){
     method:'POST', headers:JSONHDR, body:JSON.stringify({member_id:memberId})
   });
   if(!res.ok || (res.data && res.data.erro)){ uiToast((res.data&&res.data.erro)||'Erro ao adicionar.', 'erro'); return; }
-  await refresh();
+  upsertTeam(res.data);
+  renderTeams();
+  renderGrid();
 }
 
 async function removeMemberFromTeam(teamId, memberId, name){
   if(!await uiConfirm(`Remover ${name} da equipe?`, {title:'Remover integrante', okLabel:'Remover', danger:true})) return;
   const res = await api(`/api/workspace/${WORKSPACE.slug}/teams/${teamId}/members/${memberId}`, {method:'DELETE'});
   if(!res.ok || (res.data && res.data.erro)){ uiToast((res.data&&res.data.erro)||'Erro ao remover.', 'erro'); return; }
-  await refresh();
+  const t = TEAMS.find(x => x.id === teamId);
+  if(t && Array.isArray(t.members)){
+    t.members = t.members.filter(m => m.member_id !== memberId);
+    renderTeams();
+    renderGrid();
+  } else {
+    await refresh();
+  }
 }
 
 async function setLeader(teamId, memberId, isLeader){
@@ -1144,11 +1231,18 @@ async function setLeader(teamId, memberId, isLeader){
     method:'PATCH', headers:JSONHDR, body:JSON.stringify({is_leader:isLeader})
   });
   if(!res.ok || (res.data && res.data.erro)){ uiToast((res.data&&res.data.erro)||'Erro ao alterar líder.', 'erro'); return; }
-  await refresh();
+  if(res.data && res.data.id){
+    upsertTeam(res.data);
+    renderTeams();
+    renderGrid();
+  } else {
+    await refresh();
+  }
 }
 
 // ─── Eventos ────────────────────────────────────────────────────────────────
 
+document.getElementById('schedGrid')?.addEventListener('pointerdown', onGridPointerDown);
 document.getElementById('btnCreateTeam')?.addEventListener('click', createTeam);
 document.getElementById('newTeamName')?.addEventListener('keydown', e => { if(e.key === 'Enter') createTeam(); });
 document.getElementById('btnSaveEntry')?.addEventListener('click', saveEntry);

@@ -22,21 +22,35 @@ def get_engine():
     if url and "[YOUR-PASSWORD]" not in url and "[SUA-SENHA]" not in url:
         if url.startswith("postgres://"):
             url = url.replace("postgres://", "postgresql://", 1)
-        try:
-            test_engine = create_engine(
-                url,
-                pool_pre_ping=True,
-                poolclass=QueuePool,
-                pool_size=5,
-                max_overflow=5,
-                pool_recycle=1800,
-            )
-            with test_engine.connect():
-                pass
-            engine = test_engine
-            return engine
-        except Exception as e:
-            print(f"[AVISO] Falha ao conectar ao banco remoto: {e}. Tentando SQLite local.")
+
+        # DB_POOL=null para serverless (Vercel) com pooler do Supabase;
+        # DB_POOL=queue (padrão) para dev/self-hosted com QueuePool.
+        db_pool = os.environ.get("DB_POOL", "queue").strip().lower()
+        if db_pool == "null":
+            try:
+                test_engine = create_engine(url, poolclass=NullPool)
+                with test_engine.connect():
+                    pass
+                engine = test_engine
+                return engine
+            except Exception as e:
+                print(f"[AVISO] Falha ao conectar ao banco remoto: {e}. Tentando SQLite local.")
+        else:
+            try:
+                test_engine = create_engine(
+                    url,
+                    pool_pre_ping=True,
+                    poolclass=QueuePool,
+                    pool_size=5,
+                    max_overflow=5,
+                    pool_recycle=1800,
+                )
+                with test_engine.connect():
+                    pass
+                engine = test_engine
+                return engine
+            except Exception as e:
+                print(f"[AVISO] Falha ao conectar ao banco remoto: {e}. Tentando SQLite local.")
 
     try:
         os.makedirs(DATA_DIR, exist_ok=True)
@@ -129,9 +143,9 @@ class Member(Base):
     )
 
     def get_busy(self):
-        """Aulas do PDF/SIGAA, já descontando as que o aluno apagou."""
+        """Aulas do PDF/SIGAA, já descontando as que o aluno apagado."""
         schedule = json.loads(self.schedule)
-        removidos = {tuple(b) for b in json.loads(self.removed_busy)}
+        removidos = frozenset(tuple(b) for b in json.loads(self.removed_busy))
         return [b for b in schedule if tuple(b) not in removidos]
 
     def get_removed_busy(self):
@@ -772,6 +786,37 @@ def get_leading_team_ids(workspace_id: int, user_id: int):
         return {r[0] for r in rows}
 
 
+def carregar_snapshot_workspace(workspace_id: int):
+    """Carrega membros, vínculos equipe-membro (com equipes) e entradas de escala
+    do workspace em no máximo 3 queries, retornando estruturas simples (dicts).
+
+    Retorna (members_dict, team_members_list, teams_list, schedule_entries_list):
+      - members_dict: {member_id: Member}
+      - team_members_list: lista de TeamMember objects
+      - teams_list: lista de Team objects
+      - schedule_entries_list: lista de ScheduleEntry objects
+    """
+    with Session(get_engine()) as sess:
+        members = list(sess.query(Member).filter_by(workspace_id=workspace_id).all())
+        members_dict = {m.id: m for m in members}
+        team_members_list = list(
+            sess.query(TeamMember)
+            .join(Team, TeamMember.team_id == Team.id)
+            .filter(Team.workspace_id == workspace_id)
+            .all()
+        )
+        teams_list = list(
+            sess.query(Team).filter_by(workspace_id=workspace_id).order_by(Team.id).all()
+        )
+        schedule_entries_list = list(
+            sess.query(ScheduleEntry)
+            .filter_by(workspace_id=workspace_id)
+            .order_by(ScheduleEntry.day, ScheduleEntry.slot, ScheduleEntry.id)
+            .all()
+        )
+    return members_dict, team_members_list, teams_list, schedule_entries_list
+
+
 # ─── Escala de trabalho ─────────────────────────────────────────────────────
 
 
@@ -780,6 +825,17 @@ def get_schedule_entries(workspace_id: int):
         return list(
             sess.query(ScheduleEntry)
             .filter_by(workspace_id=workspace_id)
+            .order_by(ScheduleEntry.day, ScheduleEntry.slot, ScheduleEntry.id)
+            .all()
+        )
+
+
+def get_schedule_entries_por_equipe(workspace_id: int, team_id: int):
+    """Entradas da escala filtradas por equipe (WHERE team_id = ?)."""
+    with Session(get_engine()) as sess:
+        return list(
+            sess.query(ScheduleEntry)
+            .filter_by(workspace_id=workspace_id, team_id=team_id)
             .order_by(ScheduleEntry.day, ScheduleEntry.slot, ScheduleEntry.id)
             .all()
         )
@@ -862,7 +918,7 @@ def add_schedule_entries_bulk(
     status: str = "planejado",
     created_by_user_id: int | None = None,
 ):
-    """Insere várias entradas da escala em UMA ida ao banco (INSERT em lote).
+    """Insere várias entradas da escala em UMA ida ao banco (INSERT com RETURNING).
 
     Recebe `cells` como iterável de pares (dia, slot). Retorna a lista de dicts
     das entradas criadas (com id), na ordem recebida.
@@ -886,24 +942,17 @@ def add_schedule_entries_bulk(
     if not rows:
         return []
     with Session(get_engine()) as sess:
-        # execute() com lista de parâmetros => executemany: UMA ida ao banco,
-        # tanto no SQLite quanto no Postgres (não um INSERT por célula).
-        sess.execute(insert(ScheduleEntry.__table__), rows)
+        # INSERT com RETURNING: UMA query para inserir e recuperar os ids.
+        stmt = (
+            insert(ScheduleEntry.__table__)
+            .returning(ScheduleEntry.id, ScheduleEntry.day, ScheduleEntry.slot)
+        )
+        result = sess.execute(stmt, rows)
+        criadas = [{"id": row[0], "day": row[1], "slot": row[2]} for row in result]
         sess.commit()
-        # Busca as entradas recém-criadas em UMA query (para devolver os ids).
-        pares = or_(
-            *[and_(ScheduleEntry.day == d, ScheduleEntry.slot == s) for (d, s) in cells]
-        )
-        criadas = (
-            sess.query(ScheduleEntry)
-            .filter(
-                ScheduleEntry.workspace_id == workspace_id,
-                ScheduleEntry.team_id == team_id,
-                pares,
-            )
-            .all()
-        )
-        return [e.to_dict() for e in criadas]
+        # Construir dicts completos na ordem das células
+        criadas_por_par = {(e["day"], e["slot"]): e for e in criadas}
+        return [criadas_por_par[(d, s)] for (d, s) in cells]
 
 
 def delete_schedule_entries_bulk(entry_ids, workspace_id: int) -> int:

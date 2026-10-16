@@ -21,12 +21,21 @@ _test_engine = create_engine(
 )
 
 
-@pytest.fixture(autouse=True)
-def reset_db():
+@pytest.fixture(scope="session", autouse=True)
+def setup_db_schema():
     Base.metadata.drop_all(_test_engine)
     Base.metadata.create_all(_test_engine)
     yield
     Base.metadata.drop_all(_test_engine)
+
+
+@pytest.fixture(autouse=True)
+def clean_tables():
+    with _test_engine.connect() as conn:
+        for table in reversed(Base.metadata.sorted_tables):
+            conn.execute(table.delete())
+        conn.commit()
+    yield
 
 
 @pytest.fixture

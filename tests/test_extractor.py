@@ -230,3 +230,21 @@ Turmas Matriculadas:
         assert "Seg" in dias
         assert "Qua" in dias
 
+
+class TestEntradasAdversariais:
+    def test_linha_longa_com_espacos_executa_rapido(self):
+        import time
+        bad_line = "N" + " " * 10000 + "o" + " " * 10000 + "m" + " " * 10000 + "e"
+        t0 = time.perf_counter()
+        extrair_dados_aluno(bad_line)
+        dur = time.perf_counter() - t0
+        assert dur < 1.0
+
+    def test_curso_com_sequencia_repetida_executa_rapido(self):
+        import time
+        bad_line = "Curso: " + "a - " * 5000
+        t0 = time.perf_counter()
+        extrair_dados_aluno(bad_line)
+        dur = time.perf_counter() - t0
+        assert dur < 1.0
+
