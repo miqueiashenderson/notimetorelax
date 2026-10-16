@@ -694,7 +694,6 @@ function renderGrid(){
       if(canManageAny){
         td.classList.add('addable');
         td.title = 'Clique para adicionar, ou arraste para selecionar vários horários';
-        td.addEventListener('pointerdown', (ev) => onCellPointerDown(ev, d, s));
       }
 
       if(!entries.length){
@@ -757,12 +756,12 @@ function buildChip(e){
 
   if(canManageTeam(e.team_id)){
     chip.classList.add('editable');
+    chip.dataset.entryId = String(e.id);
     chip.title = 'Clique para editar ou arraste o ⠿ para estender a vários horários';
     const handle = document.createElement('span');
     handle.className = 'drag-handle';
     handle.textContent = '⠿';
     chip.appendChild(handle);
-    chip.addEventListener('pointerdown', (ev) => onChipPointerDown(ev, e));
   }
   return chip;
 }
@@ -852,24 +851,33 @@ function startDrag(ev, state){
   window.addEventListener('pointercancel', onDragEnd, {once:true});
 }
 
-function onChipPointerDown(ev, entry){
-  // No modo apagar, deixa o evento subir para a célula iniciar a seleção de apagar.
-  if(eraseMode) return;
-  ev.stopPropagation();
-  if(!canManageTeam(entry.team_id)) return;
-  startDrag(ev, {
-    mode: 'paint',
-    entryId: entry.id,
-    anchorD: entry.day,
-    anchorS: entry.slot,
-    payload: {team_id: entry.team_id, task: entry.task, status: entry.status},
-  });
-}
+function onGridPointerDown(ev){
+  if(ev.button !== undefined && ev.button !== 0) return;
+  const chipEl = ev.target.closest('.sched-chip.editable');
+  if(chipEl && !eraseMode){
+    const entryId = Number(chipEl.dataset.entryId);
+    const entry = SCHEDULE.find(x => x.id === entryId);
+    if(entry && canManageTeam(entry.team_id)){
+      ev.stopPropagation();
+      startDrag(ev, {
+        mode: 'paint',
+        entryId: entry.id,
+        anchorD: entry.day,
+        anchorS: entry.slot,
+        payload: {team_id: entry.team_id, task: entry.task, status: entry.status},
+      });
+      return;
+    }
+  }
 
-function onCellPointerDown(ev, d, s){
-  if(ev.target.closest('.sched-chip') && !eraseMode) return;
-  if(!manageableTeams().length) return;
-  startDrag(ev, {mode: eraseMode ? 'erase' : 'select', anchorD: d, anchorS: s});
+  const td = ev.target.closest('td.cell');
+  if(td && td.dataset.d !== undefined && td.dataset.s !== undefined){
+    if(ev.target.closest('.sched-chip') && !eraseMode) return;
+    if(!manageableTeams().length) return;
+    const d = Number(td.dataset.d);
+    const s = Number(td.dataset.s);
+    startDrag(ev, {mode: eraseMode ? 'erase' : 'select', anchorD: d, anchorS: s});
+  }
 }
 
 function onDragMove(ev){
@@ -1235,6 +1243,7 @@ async function setLeader(teamId, memberId, isLeader){
 
 // ─── Eventos ────────────────────────────────────────────────────────────────
 
+document.getElementById('schedGrid')?.addEventListener('pointerdown', onGridPointerDown);
 document.getElementById('btnCreateTeam')?.addEventListener('click', createTeam);
 document.getElementById('newTeamName')?.addEventListener('keydown', e => { if(e.key === 'Enter') createTeam(); });
 document.getElementById('btnSaveEntry')?.addEventListener('click', saveEntry);
