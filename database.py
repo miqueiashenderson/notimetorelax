@@ -22,21 +22,35 @@ def get_engine():
     if url and "[YOUR-PASSWORD]" not in url and "[SUA-SENHA]" not in url:
         if url.startswith("postgres://"):
             url = url.replace("postgres://", "postgresql://", 1)
-        try:
-            test_engine = create_engine(
-                url,
-                pool_pre_ping=True,
-                poolclass=QueuePool,
-                pool_size=5,
-                max_overflow=5,
-                pool_recycle=1800,
-            )
-            with test_engine.connect():
-                pass
-            engine = test_engine
-            return engine
-        except Exception as e:
-            print(f"[AVISO] Falha ao conectar ao banco remoto: {e}. Tentando SQLite local.")
+
+        # DB_POOL=null para serverless (Vercel) com pooler do Supabase;
+        # DB_POOL=queue (padrão) para dev/self-hosted com QueuePool.
+        db_pool = os.environ.get("DB_POOL", "queue").strip().lower()
+        if db_pool == "null":
+            try:
+                test_engine = create_engine(url, poolclass=NullPool)
+                with test_engine.connect():
+                    pass
+                engine = test_engine
+                return engine
+            except Exception as e:
+                print(f"[AVISO] Falha ao conectar ao banco remoto: {e}. Tentando SQLite local.")
+        else:
+            try:
+                test_engine = create_engine(
+                    url,
+                    pool_pre_ping=True,
+                    poolclass=QueuePool,
+                    pool_size=5,
+                    max_overflow=5,
+                    pool_recycle=1800,
+                )
+                with test_engine.connect():
+                    pass
+                engine = test_engine
+                return engine
+            except Exception as e:
+                print(f"[AVISO] Falha ao conectar ao banco remoto: {e}. Tentando SQLite local.")
 
     try:
         os.makedirs(DATA_DIR, exist_ok=True)
