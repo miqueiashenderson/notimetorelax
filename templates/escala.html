@@ -237,8 +237,20 @@
       <input class="input" id="newTeamName" maxlength="60" placeholder="Nome da equipe (ex.: Fuselagem)" style="min-width:220px;">
       <button class="btn btn-primary" id="btnCreateTeam">+ Criar equipe</button>
     </div>
-    <div id="readOnlyNote" class="muted" hidden>Você pode visualizar a escala, mas apenas o criador e os líderes de equipe podem editá-la.</div>
+    <div id="readOnlyNote" class="muted" hidden>Você pode visualizar a escala, mas apenas os administradores e os líderes de equipe podem editá-la.</div>
     <div class="teams" id="teamsBox"></div>
+  </section>
+
+  <section class="panel" id="adminsPanel">
+    <div class="panel-head">
+      <h2>Administradores do workspace</h2>
+    </div>
+    <p class="muted" style="margin:0 0 10px;">O criador e os co-donos podem criar e apagar equipes, definir líderes e gerenciar a escala de qualquer equipe. Só o criador apaga o workspace e altera esta lista.</p>
+    <div class="row-flex" id="adminsBox"></div>
+    <div class="row-flex" id="adminsAdd" hidden style="margin-top:10px;">
+      <select class="input" id="adminPick" style="min-width:220px;"></select>
+      <button class="btn btn-primary" id="btnAddAdmin">+ Tornar co-dono</button>
+    </div>
   </section>
 
   <section class="panel" style="padding:10px 16px;">
@@ -360,6 +372,8 @@ let TEAMS = {{ teams|tojson }};
 let SCHEDULE = {{ schedule|tojson }};
 const USER = {{ user|tojson }};
 const IS_OWNER = {{ is_owner|tojson }};
+const IS_ADMIN = {{ is_admin|tojson }};
+let ADMINS = {{ admins|tojson }};
 let LEADING = new Set({{ leading_team_ids|tojson }});
 
 let selectedTeams = new Set(TEAMS.map(t => t.id));
@@ -368,8 +382,8 @@ let modalEntryId = null;
 let eraseMode = false;
 
 function teamById(id){ return TEAMS.find(t => t.id === id) || null; }
-function canManageTeam(id){ return IS_OWNER || LEADING.has(id); }
-function manageAny(){ return IS_OWNER || LEADING.size > 0; }
+function canManageTeam(id){ return IS_ADMIN || LEADING.has(id); }
+function manageAny(){ return IS_ADMIN || LEADING.size > 0; }
 function manageableTeams(){ return TEAMS.filter(t => canManageTeam(t.id)); }
 function getDays(){ return showWeekend ? ALL_DAYS : ALL_DAYS.slice(0,5); }
 
@@ -490,13 +504,13 @@ function renderTeams(){
   const box = document.getElementById('teamsBox');
   if(!box) return;
   box.innerHTML = '';
-  document.getElementById('createTeamForm').hidden = !IS_OWNER;
+  document.getElementById('createTeamForm').hidden = !IS_ADMIN;
   document.getElementById('readOnlyNote').hidden = manageAny();
 
   if(!TEAMS.length){
     const p = document.createElement('p');
     p.className = 'muted';
-    p.textContent = IS_OWNER
+    p.textContent = IS_ADMIN
       ? 'Nenhuma equipe criada ainda. Use o campo acima para criar a primeira.'
       : 'Nenhuma equipe criada ainda.';
     box.appendChild(p);
@@ -546,7 +560,7 @@ function renderTeams(){
         row.appendChild(tag);
       }
       if(canManageTeam(t.id)){
-        if(IS_OWNER){
+        if(IS_ADMIN){
           const lb = document.createElement('button');
           lb.className = 'mini-btn';
           lb.textContent = m.is_leader ? 'remover líder' : 'tornar líder';
@@ -589,7 +603,7 @@ function renderTeams(){
       card.appendChild(addRow);
     }
 
-    if(IS_OWNER){
+    if(IS_ADMIN){
       const ctl = document.createElement('div');
       ctl.className = 'team-ctl';
       const ren = document.createElement('button');
@@ -606,6 +620,105 @@ function renderTeams(){
 
     box.appendChild(card);
   });
+}
+
+// ─── Administradores do workspace (criador + co-donos) ──────────────────────
+
+function adminUserIds(){
+  return new Set((ADMINS && ADMINS.admins ? ADMINS.admins : []).map(a => a.user_id));
+}
+function isOwnerUser(uid){
+  return ADMINS && ADMINS.owner_id != null && uid === ADMINS.owner_id;
+}
+
+function renderAdmins(){
+  const box = document.getElementById('adminsBox');
+  if(!box) return;
+  box.innerHTML = '';
+
+  const chips = [];
+  if(ADMINS && ADMINS.owner){
+    chips.push({name: ADMINS.owner.name, color: ADMINS.owner.color, badge: 'criador', memberId: ADMINS.owner.member_id, removable: false});
+  }
+  (ADMINS && ADMINS.admins ? ADMINS.admins : []).forEach(a => {
+    chips.push({name: a.name, color: a.color, badge: 'co-dono', memberId: a.member_id, removable: true});
+  });
+
+  chips.forEach(c => {
+    const chip = document.createElement('span');
+    chip.className = 'team-member';
+    chip.style.border = '1px solid var(--line)';
+    chip.style.borderRadius = '6px';
+    chip.style.padding = '5px 9px';
+    const dot = document.createElement('span');
+    dot.className = 'avatar-dot';
+    dot.style.background = c.color || 'var(--cyan)';
+    const nm = document.createElement('span');
+    nm.className = 'team-mname';
+    nm.textContent = c.name || 'Usuário';
+    const tag = document.createElement('span');
+    tag.className = 'leader-tag';
+    tag.textContent = c.badge;
+    chip.append(dot, nm, tag);
+    if(c.removable && IS_OWNER && c.memberId != null){
+      const rm = document.createElement('button');
+      rm.className = 'mini-btn danger';
+      rm.textContent = 'remover';
+      rm.onclick = () => demoteAdmin(c.memberId, c.name);
+      chip.appendChild(rm);
+    }
+    box.appendChild(chip);
+  });
+
+  const addBox = document.getElementById('adminsAdd');
+  if(!addBox) return;
+  if(!IS_OWNER){ addBox.hidden = true; return; }
+
+  const uids = adminUserIds();
+  const disponiveis = MEMBERS.filter(m => m.user_id && !isOwnerUser(m.user_id) && !uids.has(m.user_id));
+  const pick = document.getElementById('adminPick');
+  const btn = document.getElementById('btnAddAdmin');
+  pick.innerHTML = '';
+  const opt0 = document.createElement('option');
+  opt0.value = '';
+  opt0.textContent = disponiveis.length ? 'Escolher integrante com conta…' : 'Nenhum integrante com conta disponível';
+  pick.appendChild(opt0);
+  disponiveis.forEach(m => {
+    const o = document.createElement('option');
+    o.value = String(m.id);
+    o.textContent = m.name + (m.course ? ' · ' + m.course : '');
+    pick.appendChild(o);
+  });
+  pick.disabled = !disponiveis.length;
+  btn.disabled = !disponiveis.length;
+  addBox.hidden = false;
+}
+
+async function promoteAdmin(memberId){
+  const res = await api(`/api/workspace/${WORKSPACE.slug}/admins`, {
+    method:'POST', headers:JSONHDR, body:JSON.stringify({member_id:memberId})
+  });
+  if(!res.ok || (res.data && res.data.erro)){
+    uiToast((res.data && res.data.erro) || 'Não foi possível promover.', 'erro');
+    return;
+  }
+  ADMINS = res.data;
+  renderAdmins();
+  renderTeams();
+  uiToast('Co-dono adicionado.');
+}
+
+async function demoteAdmin(memberId, name){
+  if(!await uiConfirm(`Remover ${name} do cargo de co-dono?`, {title:'Remover co-dono', okLabel:'Remover', danger:true})) return;
+  const res = await api(`/api/workspace/${WORKSPACE.slug}/admins/${memberId}`, {method:'DELETE'});
+  if(!res.ok || (res.data && res.data.erro)){
+    uiToast((res.data && res.data.erro) || 'Não foi possível remover.', 'erro');
+    return;
+  }
+  ADMINS = res.data;
+  renderAdmins();
+  renderTeams();
+  uiToast('Co-dono removido.');
 }
 
 function renderFilters(){
@@ -1245,6 +1358,10 @@ async function setLeader(teamId, memberId, isLeader){
 document.getElementById('schedGrid')?.addEventListener('pointerdown', onGridPointerDown);
 document.getElementById('btnCreateTeam')?.addEventListener('click', createTeam);
 document.getElementById('newTeamName')?.addEventListener('keydown', e => { if(e.key === 'Enter') createTeam(); });
+document.getElementById('btnAddAdmin')?.addEventListener('click', () => {
+  const pick = document.getElementById('adminPick');
+  if(pick && pick.value) promoteAdmin(Number(pick.value));
+});
 document.getElementById('btnSaveEntry')?.addEventListener('click', saveEntry);
 document.getElementById('btnDeleteEntry')?.addEventListener('click', deleteEntry);
 document.getElementById('btnCancelEntry')?.addEventListener('click', closeModal);

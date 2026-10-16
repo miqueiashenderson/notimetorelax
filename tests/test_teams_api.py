@@ -50,11 +50,11 @@ class TestTeamsAPI:
         assert data["members"] == []
         assert len(get_teams(workspace.id)) == 1
 
-    def test_create_team_requires_owner(self, client, workspace, session):
+    def test_create_team_requires_admin(self, client, workspace, session):
         _login(client, "sub-bob", "bob@x.com", "Bob")
         resp = client.post(f"/api/workspace/{workspace.slug}/teams", json={"name": "X"})
         assert resp.status_code == 403
-        assert "criador" in resp.json()["erro"]
+        assert "administradores" in resp.json()["erro"]
 
     def test_create_team_unclaimed(self, client, workspace):
         _login(client, "sub-ana", "ana@x.com", "Ana")
@@ -89,6 +89,131 @@ class TestTeamsAPI:
         resp = client.delete(f"/api/workspace/{workspace.slug}/teams/{tid}")
         assert resp.status_code == 200
         assert get_teams(workspace.id) == []
+
+
+class TestWorkspaceAdmins:
+    """Co-donos: podem tudo que o criador pode, exceto apagar o workspace e
+    administrar a lista de co-donos; só o criador nomeia/remove co-donos."""
+
+    def _setup(self, client, workspace, session):
+        owner = _login(client, "sub-ana", "ana@x.com", "Ana")
+        workspace.owner_id = owner.id
+        session.commit()
+        # integrante COM conta (pode virar co-dono)
+        cap_user = get_or_create_user("sub-lia", "lia@x.com", "Lia")
+        cap = _member(workspace.id, "Lia", user_id=cap_user.id)
+        # integrante SEM conta
+        sem_conta = _member(workspace.id, "Carla")
+        return owner, cap, cap_user, sem_conta
+
+    def test_get_admins_lists_owner(self, client, workspace, session):
+        owner, cap, cap_user, sem_conta = self._setup(client, workspace, session)
+        resp = client.get(f"/api/workspace/{workspace.slug}/admins")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["owner_id"] == owner.id
+        assert data["owner"]["name"] == "Ana"
+        assert data["admins"] == []
+
+    def test_owner_promotes_member_with_account(self, client, workspace, session):
+        owner, cap, cap_user, sem_conta = self._setup(client, workspace, session)
+        resp = client.post(
+            f"/api/workspace/{workspace.slug}/admins", json={"member_id": cap.id}
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert [a["user_id"] for a in data["admins"]] == [cap_user.id]
+        assert data["admins"][0]["name"] == "Lia"
+
+    def test_promote_member_without_account_rejected(self, client, workspace, session):
+        owner, cap, cap_user, sem_conta = self._setup(client, workspace, session)
+        resp = client.post(
+            f"/api/workspace/{workspace.slug}/admins", json={"member_id": sem_conta.id}
+        )
+        assert resp.status_code == 400
+        assert "conta" in resp.json()["erro"]
+
+    def test_promote_owner_rejected(self, client, workspace, session):
+        owner, cap, cap_user, sem_conta = self._setup(client, workspace, session)
+        owner_m = _member(workspace.id, "Ana", user_id=owner.id)
+        resp = client.post(
+            f"/api/workspace/{workspace.slug}/admins", json={"member_id": owner_m.id}
+        )
+        assert resp.status_code == 400
+        assert "criador" in resp.json()["erro"]
+
+    def test_only_owner_can_promote(self, client, workspace, session):
+        owner, cap, cap_user, sem_conta = self._setup(client, workspace, session)
+        # promove a cap
+        client.post(f"/api/workspace/{workspace.slug}/admins", json={"member_id": cap.id})
+        # entra como a co-dona e tenta promover outra pessoa
+        import main as mm
+        client.cookies.set("user_session", mm._make_user_session_token(cap_user.id))
+        resp = client.post(
+            f"/api/workspace/{workspace.slug}/admins", json={"member_id": sem_conta.id}
+        )
+        assert resp.status_code == 403
+        assert "criador" in resp.json()["erro"]
+
+    def test_codono_can_create_and_delete_teams(self, client, workspace, session):
+        owner, cap, cap_user, sem_conta = self._setup(client, workspace, session)
+        client.post(f"/api/workspace/{workspace.slug}/admins", json={"member_id": cap.id})
+        # entra como co-dono
+        import main as mm
+        client.cookies.set("user_session", mm._make_user_session_token(cap_user.id))
+        r = client.post(f"/api/workspace/{workspace.slug}/teams", json={"name": "Co"})
+        assert r.status_code == 200
+        tid = r.json()["id"]
+        r2 = client.delete(f"/api/workspace/{workspace.slug}/teams/{tid}")
+        assert r2.status_code == 200
+
+    def test_codono_can_set_leader(self, client, workspace, session):
+        owner, cap, cap_user, sem_conta = self._setup(client, workspace, session)
+        import main as mm
+        client.cookies.set("user_session", mm._make_user_session_token(owner.id))
+        tid = client.post(f"/api/workspace/{workspace.slug}/teams", json={"name": "A"}).json()["id"]
+        client.post(f"/api/workspace/{workspace.slug}/teams/{tid}/members", json={"member_id": cap.id})
+        client.post(f"/api/workspace/{workspace.slug}/admins", json={"member_id": cap.id})
+        # entra como co-dono e promove cap a líder da equipe
+        client.cookies.set("user_session", mm._make_user_session_token(cap_user.id))
+        resp = client.patch(
+            f"/api/workspace/{workspace.slug}/teams/{tid}/leaders/{cap.id}",
+            json={"is_leader": True},
+        )
+        assert resp.status_code == 200
+
+    def test_codono_cannot_delete_workspace(self, client, workspace, session):
+        owner, cap, cap_user, sem_conta = self._setup(client, workspace, session)
+        import main as mm
+        client.cookies.set("user_session", mm._make_user_session_token(owner.id))
+        client.post(f"/api/workspace/{workspace.slug}/admins", json={"member_id": cap.id})
+        client.cookies.set("user_session", mm._make_user_session_token(cap_user.id))
+        resp = client.delete(f"/api/workspace/{workspace.slug}")
+        assert resp.status_code == 403
+
+    def test_demote_removes_powers(self, client, workspace, session):
+        owner, cap, cap_user, sem_conta = self._setup(client, workspace, session)
+        import main as mm
+        client.cookies.set("user_session", mm._make_user_session_token(owner.id))
+        client.post(f"/api/workspace/{workspace.slug}/admins", json={"member_id": cap.id})
+        resp = client.delete(f"/api/workspace/{workspace.slug}/admins/{cap.id}")
+        assert resp.status_code == 200
+        assert resp.json()["admins"] == []
+        # agora, como ex-co-dono, não pode mais criar equipes
+        client.cookies.set("user_session", mm._make_user_session_token(cap_user.id))
+        r = client.post(f"/api/workspace/{workspace.slug}/teams", json={"name": "X"})
+        assert r.status_code == 403
+
+    def test_escala_page_exposes_is_admin(self, client, workspace, session):
+        owner, cap, cap_user, sem_conta = self._setup(client, workspace, session)
+        client.post(f"/api/workspace/{workspace.slug}/admins", json={"member_id": cap.id})
+        import main as mm
+        client.cookies.set("user_session", mm._make_user_session_token(cap_user.id))
+        resp = client.get(f"/workspace/{workspace.slug}/escala")
+        assert resp.status_code == 200
+        assert "const IS_ADMIN = true;" in resp.text
+        assert "const IS_OWNER = false;" in resp.text
+        assert '"badge"' not in resp.text  # sanity: payload é JSON puro
 
 
 class TestTeamMembersAPI:

@@ -21,6 +21,8 @@ from database import (
     add_schedule_entries_bulk, update_schedule_entry, delete_schedule_entry,
     delete_schedule_entries_bulk, SCHEDULE_STATUSES,
     carregar_snapshot_workspace,
+    get_workspace_admin_user_ids, is_workspace_admin, add_workspace_admin,
+    remove_workspace_admin,
 )
 from extractor import extrair_de_pdf_bytes, title_case, SLOTS
 
@@ -261,10 +263,53 @@ def _schedule_payload(ws, snapshot=None, busy=None) -> list:
     return out
 
 
+def _is_admin(ws, user_id) -> bool:
+    """True se o usuário é criador do workspace ou um co-dono."""
+    if not user_id:
+        return False
+    if ws.owner_id == user_id:
+        return True
+    return is_workspace_admin(ws.id, user_id)
+
+
+def _admins_payload(ws) -> dict:
+    """Criador + co-donos, com os dados do integrante correspondente (para a UI)."""
+    members = get_members(ws.id)
+    by_user: dict[int, object] = {}
+    for m in members:
+        if m.user_id and m.user_id not in by_user:
+            by_user[m.user_id] = m
+
+    def _entrada(uid):
+        m = by_user.get(uid)
+        if m:
+            return {
+                "user_id": uid,
+                "member_id": m.id,
+                "name": m.name,
+                "color": m.color,
+            }
+        u = get_user(uid)
+        nome = (u.google_name or u.google_email) if u else f"Usuário {uid}"
+        return {
+            "user_id": uid,
+            "member_id": None,
+            "name": nome,
+            "color": None,
+        }
+
+    co = [_entrada(uid) for uid in get_workspace_admin_user_ids(ws.id)]
+    return {
+        "owner_id": ws.owner_id,
+        "owner": _entrada(ws.owner_id) if ws.owner_id else None,
+        "admins": co,
+    }
+
+
 def _can_manage_team(ws, team, user_id) -> bool:
     if not user_id or team is None or team.workspace_id != ws.id:
         return False
-    if ws.owner_id == user_id:
+    if _is_admin(ws, user_id):
         return True
     return is_team_leader(team.id, user_id, ws.id)
 
@@ -652,6 +697,8 @@ async def escala_page(request: Request, slug: str):
             "status_labels": STATUS_LABELS,
             "user": user.to_dict() if user else None,
             "is_owner": bool(uid and ws.owner_id == uid),
+            "is_admin": bool(uid and _is_admin(ws, uid)),
+            "admins": _admins_payload(ws),
             "leading_team_ids": sorted(get_leading_team_ids(ws.id, uid)) if uid else [],
             "slots": SLOTS,
         },
@@ -958,15 +1005,76 @@ async def api_get_teams(request: Request, slug: str):
     return JSONResponse(_teams_payload(ws))
 
 
-@app.post("/api/workspace/{slug}/teams")
-async def api_create_team(request: Request, slug: str):
+# ─── API: co-donos (administradores do workspace) ────────────────────────────
+# Só o criador nomeia/remove co-donos. Co-donos têm os mesmos poderes do
+# criador, exceto apagar o workspace e administrar a própria lista de co-donos.
+
+
+@app.get("/api/workspace/{slug}/admins")
+async def api_get_admins(request: Request, slug: str):
+    ws, err = _load_authed_ws(request, slug)
+    if err:
+        return err
+    return JSONResponse(_admins_payload(ws))
+
+
+@app.post("/api/workspace/{slug}/admins")
+async def api_add_admin(request: Request, slug: str):
     ws, err = _load_authed_ws(request, slug)
     if err:
         return err
     user_id = _current_user_id(request)
     if ws.owner_id is None or ws.owner_id != user_id:
         return JSONResponse(
-            {"erro": "Apenas o criador do workspace pode criar equipes."}, status_code=403
+            {"erro": "Apenas o criador do workspace pode nomear co-donos."},
+            status_code=403,
+        )
+    body = await request.json()
+    member_id = _coerce_int(body.get("member_id"))
+    member = get_member(member_id) if member_id is not None else None
+    if not member or member.workspace_id != ws.id:
+        return JSONResponse({"erro": "Membro não encontrado."}, status_code=404)
+    if not member.user_id:
+        return JSONResponse(
+            {"erro": "Esse integrante ainda não tem uma conta vinculada."},
+            status_code=400,
+        )
+    if ws.owner_id == member.user_id:
+        return JSONResponse(
+            {"erro": "O criador já administra o workspace."}, status_code=400
+        )
+    add_workspace_admin(ws.id, member.user_id)
+    return JSONResponse(_admins_payload(ws))
+
+
+@app.delete("/api/workspace/{slug}/admins/{member_id}")
+async def api_remove_admin(request: Request, slug: str, member_id: int):
+    ws, err = _load_authed_ws(request, slug)
+    if err:
+        return err
+    user_id = _current_user_id(request)
+    if ws.owner_id is None or ws.owner_id != user_id:
+        return JSONResponse(
+            {"erro": "Apenas o criador do workspace pode remover co-donos."},
+            status_code=403,
+        )
+    member = get_member(member_id)
+    if not member or member.workspace_id != ws.id:
+        return JSONResponse({"erro": "Membro não encontrado."}, status_code=404)
+    if member.user_id:
+        remove_workspace_admin(ws.id, member.user_id)
+    return JSONResponse(_admins_payload(ws))
+
+
+@app.post("/api/workspace/{slug}/teams")
+async def api_create_team(request: Request, slug: str):
+    ws, err = _load_authed_ws(request, slug)
+    if err:
+        return err
+    user_id = _current_user_id(request)
+    if not _is_admin(ws, user_id):
+        return JSONResponse(
+            {"erro": "Apenas administradores podem criar equipes."}, status_code=403
         )
     body = await request.json()
     name = body.get("name", "")
@@ -986,9 +1094,9 @@ async def api_update_team(request: Request, slug: str, team_id: int):
     if err:
         return err
     user_id = _current_user_id(request)
-    if ws.owner_id is None or ws.owner_id != user_id:
+    if not _is_admin(ws, user_id):
         return JSONResponse(
-            {"erro": "Apenas o criador do workspace pode editar equipes."}, status_code=403
+            {"erro": "Apenas administradores podem editar equipes."}, status_code=403
         )
     team = get_team(team_id)
     if not team or team.workspace_id != ws.id:
@@ -1011,9 +1119,9 @@ async def api_delete_team(request: Request, slug: str, team_id: int):
     if err:
         return err
     user_id = _current_user_id(request)
-    if ws.owner_id is None or ws.owner_id != user_id:
+    if not _is_admin(ws, user_id):
         return JSONResponse(
-            {"erro": "Apenas o criador do workspace pode apagar equipes."}, status_code=403
+            {"erro": "Apenas administradores podem apagar equipes."}, status_code=403
         )
     if not delete_team(team_id, ws.id):
         return JSONResponse({"erro": "Equipe não encontrada."}, status_code=404)
@@ -1039,7 +1147,7 @@ async def api_add_team_member(request: Request, slug: str, team_id: int):
     if not member or member.workspace_id != ws.id:
         return JSONResponse({"erro": "Membro não encontrado."}, status_code=404)
     is_leader = bool(body.get("is_leader", False))
-    if is_leader and ws.owner_id != user_id:
+    if is_leader and not _is_admin(ws, user_id):
         is_leader = False
     add_team_member(team_id, member_id, is_leader=is_leader)
     payload = next((t for t in _teams_payload(ws) if t["id"] == team_id), None)
@@ -1068,9 +1176,9 @@ async def api_set_team_leader(request: Request, slug: str, team_id: int, member_
     if err:
         return err
     user_id = _current_user_id(request)
-    if ws.owner_id is None or ws.owner_id != user_id:
+    if not _is_admin(ws, user_id):
         return JSONResponse(
-            {"erro": "Apenas o criador do workspace pode definir líderes."}, status_code=403
+            {"erro": "Apenas administradores podem definir líderes."}, status_code=403
         )
     team = get_team(team_id)
     if not team or team.workspace_id != ws.id:
@@ -1294,8 +1402,8 @@ async def api_delete_schedule_bulk(request: Request, slug: str):
         return JSONResponse({"erro": "Nenhuma entrada selecionada."}, status_code=400)
 
     entries = {e.id: e for e in get_schedule_entries(ws.id)}
-    # Permissão resolvida uma vez: dono pode tudo; líder só as equipes que lidera.
-    if user_id and ws.owner_id == user_id:
+    # Permissão resolvida uma vez: admin pode tudo; líder só as equipes que lidera.
+    if user_id and _is_admin(ws, user_id):
         manageable = None  # None => qualquer equipe do workspace
     else:
         manageable = set(get_leading_team_ids(ws.id, user_id)) if user_id else set()
