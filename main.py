@@ -237,13 +237,14 @@ def _teams_payload(ws, snapshot=None) -> list:
     return out
 
 
-def _schedule_payload(ws, snapshot=None) -> list:
+def _schedule_payload(ws, snapshot=None, busy=None) -> list:
     """Entradas da escala com os conflitos (integrantes ocupados) de cada uma."""
     if snapshot is None:
         members_dict, team_members_list, _, schedule_entries_list = carregar_snapshot_workspace(ws.id)
     else:
         members_dict, team_members_list, _, schedule_entries_list = snapshot
-    busy = {mid: {(b[0], b[1]) for b in m.get_all_busy()} for mid, m in members_dict.items()}
+    if busy is None:
+        busy = _busy_por_membro(members_dict)
     team_members: dict[int, list] = {}
     for tm in team_members_list:
         team_members.setdefault(tm.team_id, []).append(tm.member_id)
@@ -289,7 +290,16 @@ def _load_authed_ws(request: Request, slug: str):
     return ws, None
 
 
-def _conflicts_for_cells(ws, team_id: int, cells) -> dict:
+def _busy_por_membro(members_dict) -> dict:
+    """Calcula o conjunto de horários ocupados (busy) de cada membro uma única vez.
+    Retorna {member_id: set((dia, slot))}."""
+    return {
+        mid: {(b[0], b[1]) for b in m.get_all_busy()}
+        for mid, m in members_dict.items()
+    }
+
+
+def _conflicts_for_cells(ws, team_id: int, cells, busy=None) -> dict:
     """Conflitos de VÁRIAS células de uma equipe em uma só passada ao banco.
 
     Busca os membros e os integrantes da equipe uma única vez e avalia todas as
@@ -300,10 +310,8 @@ def _conflicts_for_cells(ws, team_id: int, cells) -> dict:
         return {}
     members = {m.id: m for m in get_members(ws.id)}
     team_members = get_team_members(team_id)
-    busy = {
-        mid: {(b[0], b[1]) for b in m.get_all_busy()}
-        for mid, m in members.items()
-    }
+    if busy is None:
+        busy = _busy_por_membro(members)
     out: dict = {}
     for (d, s) in cells:
         key = (d, s)
@@ -1107,8 +1115,12 @@ async def api_add_schedule_bulk(request: Request, slug: str):
     }
     new_cells = sorted(c for c in cells if c not in existing)
 
+    # Calcula busy uma vez e reutiliza em _conflicts_for_cells
+    members_dict = {m.id: m for m in get_members(ws.id)}
+    busy = _busy_por_membro(members_dict)
+
     # Conflitos de todas as células em uma só passada ao banco.
-    conflict_map = _conflicts_for_cells(ws, team_id, new_cells)
+    conflict_map = _conflicts_for_cells(ws, team_id, new_cells, busy=busy)
     conflicts_map: dict[int, dict] = {}
     for conflitos in conflict_map.values():
         for c in conflitos:

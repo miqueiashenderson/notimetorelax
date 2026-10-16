@@ -143,9 +143,9 @@ class Member(Base):
     )
 
     def get_busy(self):
-        """Aulas do PDF/SIGAA, já descontando as que o aluno apagou."""
+        """Aulas do PDF/SIGAA, já descontando as que o aluno apagado."""
         schedule = json.loads(self.schedule)
-        removidos = {tuple(b) for b in json.loads(self.removed_busy)}
+        removidos = frozenset(tuple(b) for b in json.loads(self.removed_busy))
         return [b for b in schedule if tuple(b) not in removidos]
 
     def get_removed_busy(self):
