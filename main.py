@@ -17,7 +17,7 @@ from database import (
     get_teams, get_team, create_team, update_team, delete_team,
     get_team_members, get_workspace_team_members, add_team_member,
     remove_team_member, set_team_leader, is_team_leader, get_leading_team_ids,
-    get_schedule_entries, get_schedule_entry, add_schedule_entry,
+    get_schedule_entries, get_schedule_entries_por_equipe, get_schedule_entry, add_schedule_entry,
     add_schedule_entries_bulk, update_schedule_entry, delete_schedule_entry,
     delete_schedule_entries_bulk, SCHEDULE_STATUSES,
     carregar_snapshot_workspace,
@@ -1097,7 +1097,7 @@ async def api_add_schedule_bulk(request: Request, slug: str):
         return JSONResponse({"erro": "Horários inválidos."}, status_code=400)
 
     existing = {
-        (e.day, e.slot) for e in get_schedule_entries(ws.id) if e.team_id == team_id
+        (e.day, e.slot) for e in get_schedule_entries_por_equipe(ws.id, team_id)
     }
     new_cells = sorted(c for c in cells if c not in existing)
 

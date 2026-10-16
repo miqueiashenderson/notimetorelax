@@ -830,6 +830,17 @@ def get_schedule_entries(workspace_id: int):
         )
 
 
+def get_schedule_entries_por_equipe(workspace_id: int, team_id: int):
+    """Entradas da escala filtradas por equipe (WHERE team_id = ?)."""
+    with Session(get_engine()) as sess:
+        return list(
+            sess.query(ScheduleEntry)
+            .filter_by(workspace_id=workspace_id, team_id=team_id)
+            .order_by(ScheduleEntry.day, ScheduleEntry.slot, ScheduleEntry.id)
+            .all()
+        )
+
+
 def get_schedule_entry(entry_id: int):
     with Session(get_engine()) as sess:
         return sess.query(ScheduleEntry).filter_by(id=entry_id).first()
