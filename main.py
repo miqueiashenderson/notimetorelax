@@ -532,6 +532,7 @@ async def dashboard(request: Request, slug: str):
             "workspace": ws.to_dict(),
             "members": [m.to_dict() for m in members],
             "user": user.to_dict() if user else None,
+            "slots": SLOTS,
         },
     )
 
@@ -604,6 +605,7 @@ async def escala_page(request: Request, slug: str):
             "user": user.to_dict() if user else None,
             "is_owner": bool(uid and ws.owner_id == uid),
             "leading_team_ids": sorted(get_leading_team_ids(ws.id, uid)) if uid else [],
+            "slots": SLOTS,
         },
     )
     # Evita que o navegador sirva uma versão antiga da página (JS/CSS) após
