@@ -60,7 +60,13 @@ _db_ready = False
 def _ensure_db():
     global _db_ready
     if not _db_ready:
-        init_db()
+        # Verifica se a tabela workspaces já existe antes de rodar init_db
+        from sqlalchemy import inspect as sa_inspect
+        from database import get_engine
+        engine = get_engine()
+        inspector = sa_inspect(engine)
+        if "workspaces" not in inspector.get_table_names():
+            init_db()
         _db_ready = True
 
 
