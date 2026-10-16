@@ -1,0 +1,842 @@
+[
+  {
+    "id": 1,
+    "workspace_id": 1,
+    "team_id": 1,
+    "day": 0,
+    "slot": 0,
+    "task": "Tarefa 0",
+    "status": "planejado",
+    "created_by_user_id": null,
+    "created_at": "2026-10-16T05:02:02.940898+00:00",
+    "updated_at": "2026-10-16T05:02:02.940904+00:00",
+    "conflicts": [
+      {
+        "id": 1,
+        "name": "Membro 00"
+      }
+    ]
+  },
+  {
+    "id": 15,
+    "workspace_id": 1,
+    "team_id": 3,
+    "day": 0,
+    "slot": 0,
+    "task": "Tarefa 14",
+    "status": "planejado",
+    "created_by_user_id": null,
+    "created_at": "2026-10-16T05:02:02.942925+00:00",
+    "updated_at": "2026-10-16T05:02:02.942926+00:00",
+    "conflicts": [
+      {
+        "id": 15,
+        "name": "Membro 14"
+      }
+    ]
+  },
+  {
+    "id": 29,
+    "workspace_id": 1,
+    "team_id": 2,
+    "day": 0,
+    "slot": 0,
+    "task": "Tarefa 28",
+    "status": "planejado",
+    "created_by_user_id": null,
+    "created_at": "2026-10-16T05:02:02.942951+00:00",
+    "updated_at": "2026-10-16T05:02:02.942952+00:00",
+    "conflicts": [
+      {
+        "id": 29,
+        "name": "Membro 28"
+      }
+    ]
+  },
+  {
+    "id": 43,
+    "workspace_id": 1,
+    "team_id": 1,
+    "day": 0,
+    "slot": 0,
+    "task": "Tarefa 42",
+    "status": "planejado",
+    "created_by_user_id": null,
+    "created_at": "2026-10-16T05:02:02.942976+00:00",
+    "updated_at": "2026-10-16T05:02:02.942978+00:00",
+    "conflicts": [
+      {
+        "id": 1,
+        "name": "Membro 00"
+      }
+    ]
+  },
+  {
+    "id": 8,
+    "workspace_id": 1,
+    "team_id": 2,
+    "day": 0,
+    "slot": 7,
+    "task": "Tarefa 7",
+    "status": "planejado",
+    "created_by_user_id": null,
+    "created_at": "2026-10-16T05:02:02.942912+00:00",
+    "updated_at": "2026-10-16T05:02:02.942913+00:00",
+    "conflicts": [
+      {
+        "id": 8,
+        "name": "Membro 07"
+      }
+    ]
+  },
+  {
+    "id": 22,
+    "workspace_id": 1,
+    "team_id": 1,
+    "day": 0,
+    "slot": 7,
+    "task": "Tarefa 21",
+    "status": "planejado",
+    "created_by_user_id": null,
+    "created_at": "2026-10-16T05:02:02.942939+00:00",
+    "updated_at": "2026-10-16T05:02:02.942939+00:00",
+    "conflicts": [
+      {
+        "id": 22,
+        "name": "Membro 21"
+      }
+    ]
+  },
+  {
+    "id": 36,
+    "workspace_id": 1,
+    "team_id": 3,
+    "day": 0,
+    "slot": 7,
+    "task": "Tarefa 35",
+    "status": "planejado",
+    "created_by_user_id": null,
+    "created_at": "2026-10-16T05:02:02.942964+00:00",
+    "updated_at": "2026-10-16T05:02:02.942964+00:00",
+    "conflicts": []
+  },
+  {
+    "id": 50,
+    "workspace_id": 1,
+    "team_id": 2,
+    "day": 0,
+    "slot": 7,
+    "task": "Tarefa 49",
+    "status": "planejado",
+    "created_by_user_id": null,
+    "created_at": "2026-10-16T05:02:02.942989+00:00",
+    "updated_at": "2026-10-16T05:02:02.942990+00:00",
+    "conflicts": [
+      {
+        "id": 8,
+        "name": "Membro 07"
+      }
+    ]
+  },
+  {
+    "id": 2,
+    "workspace_id": 1,
+    "team_id": 2,
+    "day": 1,
+    "slot": 1,
+    "task": "Tarefa 1",
+    "status": "planejado",
+    "created_by_user_id": null,
+    "created_at": "2026-10-16T05:02:02.941601+00:00",
+    "updated_at": "2026-10-16T05:02:02.941628+00:00",
+    "conflicts": [
+      {
+        "id": 2,
+        "name": "Membro 01"
+      }
+    ]
+  },
+  {
+    "id": 16,
+    "workspace_id": 1,
+    "team_id": 1,
+    "day": 1,
+    "slot": 1,
+    "task": "Tarefa 15",
+    "status": "planejado",
+    "created_by_user_id": null,
+    "created_at": "2026-10-16T05:02:02.942927+00:00",
+    "updated_at": "2026-10-16T05:02:02.942928+00:00",
+    "conflicts": [
+      {
+        "id": 16,
+        "name": "Membro 15"
+      }
+    ]
+  },
+  {
+    "id": 30,
+    "workspace_id": 1,
+    "team_id": 3,
+    "day": 1,
+    "slot": 1,
+    "task": "Tarefa 29",
+    "status": "planejado",
+    "created_by_user_id": null,
+    "created_at": "2026-10-16T05:02:02.942953+00:00",
+    "updated_at": "2026-10-16T05:02:02.942954+00:00",
+    "conflicts": [
+      {
+        "id": 30,
+        "name": "Membro 29"
+      }
+    ]
+  },
+  {
+    "id": 44,
+    "workspace_id": 1,
+    "team_id": 2,
+    "day": 1,
+    "slot": 1,
+    "task": "Tarefa 43",
+    "status": "planejado",
+    "created_by_user_id": null,
+    "created_at": "2026-10-16T05:02:02.942979+00:00",
+    "updated_at": "2026-10-16T05:02:02.942979+00:00",
+    "conflicts": [
+      {
+        "id": 2,
+        "name": "Membro 01"
+      }
+    ]
+  },
+  {
+    "id": 9,
+    "workspace_id": 1,
+    "team_id": 3,
+    "day": 1,
+    "slot": 8,
+    "task": "Tarefa 8",
+    "status": "planejado",
+    "created_by_user_id": null,
+    "created_at": "2026-10-16T05:02:02.942914+00:00",
+    "updated_at": "2026-10-16T05:02:02.942915+00:00",
+    "conflicts": [
+      {
+        "id": 9,
+        "name": "Membro 08"
+      }
+    ]
+  },
+  {
+    "id": 23,
+    "workspace_id": 1,
+    "team_id": 2,
+    "day": 1,
+    "slot": 8,
+    "task": "Tarefa 22",
+    "status": "planejado",
+    "created_by_user_id": null,
+    "created_at": "2026-10-16T05:02:02.942940+00:00",
+    "updated_at": "2026-10-16T05:02:02.942941+00:00",
+    "conflicts": [
+      {
+        "id": 23,
+        "name": "Membro 22"
+      }
+    ]
+  },
+  {
+    "id": 37,
+    "workspace_id": 1,
+    "team_id": 1,
+    "day": 1,
+    "slot": 8,
+    "task": "Tarefa 36",
+    "status": "planejado",
+    "created_by_user_id": null,
+    "created_at": "2026-10-16T05:02:02.942965+00:00",
+    "updated_at": "2026-10-16T05:02:02.942966+00:00",
+    "conflicts": []
+  },
+  {
+    "id": 3,
+    "workspace_id": 1,
+    "team_id": 3,
+    "day": 2,
+    "slot": 2,
+    "task": "Tarefa 2",
+    "status": "planejado",
+    "created_by_user_id": null,
+    "created_at": "2026-10-16T05:02:02.942899+00:00",
+    "updated_at": "2026-10-16T05:02:02.942903+00:00",
+    "conflicts": [
+      {
+        "id": 3,
+        "name": "Membro 02"
+      }
+    ]
+  },
+  {
+    "id": 17,
+    "workspace_id": 1,
+    "team_id": 2,
+    "day": 2,
+    "slot": 2,
+    "task": "Tarefa 16",
+    "status": "planejado",
+    "created_by_user_id": null,
+    "created_at": "2026-10-16T05:02:02.942928+00:00",
+    "updated_at": "2026-10-16T05:02:02.942929+00:00",
+    "conflicts": [
+      {
+        "id": 17,
+        "name": "Membro 16"
+      }
+    ]
+  },
+  {
+    "id": 31,
+    "workspace_id": 1,
+    "team_id": 1,
+    "day": 2,
+    "slot": 2,
+    "task": "Tarefa 30",
+    "status": "planejado",
+    "created_by_user_id": null,
+    "created_at": "2026-10-16T05:02:02.942955+00:00",
+    "updated_at": "2026-10-16T05:02:02.942956+00:00",
+    "conflicts": []
+  },
+  {
+    "id": 45,
+    "workspace_id": 1,
+    "team_id": 3,
+    "day": 2,
+    "slot": 2,
+    "task": "Tarefa 44",
+    "status": "planejado",
+    "created_by_user_id": null,
+    "created_at": "2026-10-16T05:02:02.942980+00:00",
+    "updated_at": "2026-10-16T05:02:02.942981+00:00",
+    "conflicts": [
+      {
+        "id": 3,
+        "name": "Membro 02"
+      }
+    ]
+  },
+  {
+    "id": 10,
+    "workspace_id": 1,
+    "team_id": 1,
+    "day": 2,
+    "slot": 9,
+    "task": "Tarefa 9",
+    "status": "planejado",
+    "created_by_user_id": null,
+    "created_at": "2026-10-16T05:02:02.942916+00:00",
+    "updated_at": "2026-10-16T05:02:02.942917+00:00",
+    "conflicts": [
+      {
+        "id": 10,
+        "name": "Membro 09"
+      }
+    ]
+  },
+  {
+    "id": 24,
+    "workspace_id": 1,
+    "team_id": 3,
+    "day": 2,
+    "slot": 9,
+    "task": "Tarefa 23",
+    "status": "planejado",
+    "created_by_user_id": null,
+    "created_at": "2026-10-16T05:02:02.942942+00:00",
+    "updated_at": "2026-10-16T05:02:02.942943+00:00",
+    "conflicts": [
+      {
+        "id": 24,
+        "name": "Membro 23"
+      }
+    ]
+  },
+  {
+    "id": 38,
+    "workspace_id": 1,
+    "team_id": 2,
+    "day": 2,
+    "slot": 9,
+    "task": "Tarefa 37",
+    "status": "planejado",
+    "created_by_user_id": null,
+    "created_at": "2026-10-16T05:02:02.942967+00:00",
+    "updated_at": "2026-10-16T05:02:02.942968+00:00",
+    "conflicts": []
+  },
+  {
+    "id": 4,
+    "workspace_id": 1,
+    "team_id": 1,
+    "day": 3,
+    "slot": 3,
+    "task": "Tarefa 3",
+    "status": "planejado",
+    "created_by_user_id": null,
+    "created_at": "2026-10-16T05:02:02.942904+00:00",
+    "updated_at": "2026-10-16T05:02:02.942905+00:00",
+    "conflicts": [
+      {
+        "id": 4,
+        "name": "Membro 03"
+      }
+    ]
+  },
+  {
+    "id": 18,
+    "workspace_id": 1,
+    "team_id": 3,
+    "day": 3,
+    "slot": 3,
+    "task": "Tarefa 17",
+    "status": "planejado",
+    "created_by_user_id": null,
+    "created_at": "2026-10-16T05:02:02.942931+00:00",
+    "updated_at": "2026-10-16T05:02:02.942932+00:00",
+    "conflicts": [
+      {
+        "id": 18,
+        "name": "Membro 17"
+      }
+    ]
+  },
+  {
+    "id": 32,
+    "workspace_id": 1,
+    "team_id": 2,
+    "day": 3,
+    "slot": 3,
+    "task": "Tarefa 31",
+    "status": "planejado",
+    "created_by_user_id": null,
+    "created_at": "2026-10-16T05:02:02.942957+00:00",
+    "updated_at": "2026-10-16T05:02:02.942957+00:00",
+    "conflicts": []
+  },
+  {
+    "id": 46,
+    "workspace_id": 1,
+    "team_id": 1,
+    "day": 3,
+    "slot": 3,
+    "task": "Tarefa 45",
+    "status": "planejado",
+    "created_by_user_id": null,
+    "created_at": "2026-10-16T05:02:02.942982+00:00",
+    "updated_at": "2026-10-16T05:02:02.942983+00:00",
+    "conflicts": [
+      {
+        "id": 4,
+        "name": "Membro 03"
+      }
+    ]
+  },
+  {
+    "id": 11,
+    "workspace_id": 1,
+    "team_id": 2,
+    "day": 3,
+    "slot": 10,
+    "task": "Tarefa 10",
+    "status": "planejado",
+    "created_by_user_id": null,
+    "created_at": "2026-10-16T05:02:02.942918+00:00",
+    "updated_at": "2026-10-16T05:02:02.942919+00:00",
+    "conflicts": [
+      {
+        "id": 11,
+        "name": "Membro 10"
+      }
+    ]
+  },
+  {
+    "id": 25,
+    "workspace_id": 1,
+    "team_id": 1,
+    "day": 3,
+    "slot": 10,
+    "task": "Tarefa 24",
+    "status": "planejado",
+    "created_by_user_id": null,
+    "created_at": "2026-10-16T05:02:02.942944+00:00",
+    "updated_at": "2026-10-16T05:02:02.942945+00:00",
+    "conflicts": [
+      {
+        "id": 25,
+        "name": "Membro 24"
+      }
+    ]
+  },
+  {
+    "id": 39,
+    "workspace_id": 1,
+    "team_id": 3,
+    "day": 3,
+    "slot": 10,
+    "task": "Tarefa 38",
+    "status": "planejado",
+    "created_by_user_id": null,
+    "created_at": "2026-10-16T05:02:02.942969+00:00",
+    "updated_at": "2026-10-16T05:02:02.942970+00:00",
+    "conflicts": []
+  },
+  {
+    "id": 5,
+    "workspace_id": 1,
+    "team_id": 2,
+    "day": 4,
+    "slot": 4,
+    "task": "Tarefa 4",
+    "status": "planejado",
+    "created_by_user_id": null,
+    "created_at": "2026-10-16T05:02:02.942906+00:00",
+    "updated_at": "2026-10-16T05:02:02.942907+00:00",
+    "conflicts": [
+      {
+        "id": 5,
+        "name": "Membro 04"
+      }
+    ]
+  },
+  {
+    "id": 19,
+    "workspace_id": 1,
+    "team_id": 1,
+    "day": 4,
+    "slot": 4,
+    "task": "Tarefa 18",
+    "status": "planejado",
+    "created_by_user_id": null,
+    "created_at": "2026-10-16T05:02:02.942933+00:00",
+    "updated_at": "2026-10-16T05:02:02.942934+00:00",
+    "conflicts": [
+      {
+        "id": 19,
+        "name": "Membro 18"
+      }
+    ]
+  },
+  {
+    "id": 33,
+    "workspace_id": 1,
+    "team_id": 3,
+    "day": 4,
+    "slot": 4,
+    "task": "Tarefa 32",
+    "status": "planejado",
+    "created_by_user_id": null,
+    "created_at": "2026-10-16T05:02:02.942958+00:00",
+    "updated_at": "2026-10-16T05:02:02.942959+00:00",
+    "conflicts": []
+  },
+  {
+    "id": 47,
+    "workspace_id": 1,
+    "team_id": 2,
+    "day": 4,
+    "slot": 4,
+    "task": "Tarefa 46",
+    "status": "planejado",
+    "created_by_user_id": null,
+    "created_at": "2026-10-16T05:02:02.942984+00:00",
+    "updated_at": "2026-10-16T05:02:02.942985+00:00",
+    "conflicts": [
+      {
+        "id": 5,
+        "name": "Membro 04"
+      }
+    ]
+  },
+  {
+    "id": 12,
+    "workspace_id": 1,
+    "team_id": 3,
+    "day": 4,
+    "slot": 11,
+    "task": "Tarefa 11",
+    "status": "planejado",
+    "created_by_user_id": null,
+    "created_at": "2026-10-16T05:02:02.942919+00:00",
+    "updated_at": "2026-10-16T05:02:02.942920+00:00",
+    "conflicts": [
+      {
+        "id": 12,
+        "name": "Membro 11"
+      }
+    ]
+  },
+  {
+    "id": 26,
+    "workspace_id": 1,
+    "team_id": 2,
+    "day": 4,
+    "slot": 11,
+    "task": "Tarefa 25",
+    "status": "planejado",
+    "created_by_user_id": null,
+    "created_at": "2026-10-16T05:02:02.942946+00:00",
+    "updated_at": "2026-10-16T05:02:02.942946+00:00",
+    "conflicts": [
+      {
+        "id": 26,
+        "name": "Membro 25"
+      }
+    ]
+  },
+  {
+    "id": 40,
+    "workspace_id": 1,
+    "team_id": 1,
+    "day": 4,
+    "slot": 11,
+    "task": "Tarefa 39",
+    "status": "planejado",
+    "created_by_user_id": null,
+    "created_at": "2026-10-16T05:02:02.942971+00:00",
+    "updated_at": "2026-10-16T05:02:02.942971+00:00",
+    "conflicts": []
+  },
+  {
+    "id": 6,
+    "workspace_id": 1,
+    "team_id": 3,
+    "day": 5,
+    "slot": 5,
+    "task": "Tarefa 5",
+    "status": "planejado",
+    "created_by_user_id": null,
+    "created_at": "2026-10-16T05:02:02.942908+00:00",
+    "updated_at": "2026-10-16T05:02:02.942909+00:00",
+    "conflicts": [
+      {
+        "id": 6,
+        "name": "Membro 05"
+      }
+    ]
+  },
+  {
+    "id": 20,
+    "workspace_id": 1,
+    "team_id": 2,
+    "day": 5,
+    "slot": 5,
+    "task": "Tarefa 19",
+    "status": "planejado",
+    "created_by_user_id": null,
+    "created_at": "2026-10-16T05:02:02.942935+00:00",
+    "updated_at": "2026-10-16T05:02:02.942936+00:00",
+    "conflicts": [
+      {
+        "id": 20,
+        "name": "Membro 19"
+      }
+    ]
+  },
+  {
+    "id": 34,
+    "workspace_id": 1,
+    "team_id": 1,
+    "day": 5,
+    "slot": 5,
+    "task": "Tarefa 33",
+    "status": "planejado",
+    "created_by_user_id": null,
+    "created_at": "2026-10-16T05:02:02.942960+00:00",
+    "updated_at": "2026-10-16T05:02:02.942961+00:00",
+    "conflicts": []
+  },
+  {
+    "id": 48,
+    "workspace_id": 1,
+    "team_id": 3,
+    "day": 5,
+    "slot": 5,
+    "task": "Tarefa 47",
+    "status": "planejado",
+    "created_by_user_id": null,
+    "created_at": "2026-10-16T05:02:02.942986+00:00",
+    "updated_at": "2026-10-16T05:02:02.942987+00:00",
+    "conflicts": [
+      {
+        "id": 6,
+        "name": "Membro 05"
+      }
+    ]
+  },
+  {
+    "id": 13,
+    "workspace_id": 1,
+    "team_id": 1,
+    "day": 5,
+    "slot": 12,
+    "task": "Tarefa 12",
+    "status": "planejado",
+    "created_by_user_id": null,
+    "created_at": "2026-10-16T05:02:02.942921+00:00",
+    "updated_at": "2026-10-16T05:02:02.942922+00:00",
+    "conflicts": [
+      {
+        "id": 13,
+        "name": "Membro 12"
+      }
+    ]
+  },
+  {
+    "id": 27,
+    "workspace_id": 1,
+    "team_id": 3,
+    "day": 5,
+    "slot": 12,
+    "task": "Tarefa 26",
+    "status": "planejado",
+    "created_by_user_id": null,
+    "created_at": "2026-10-16T05:02:02.942948+00:00",
+    "updated_at": "2026-10-16T05:02:02.942948+00:00",
+    "conflicts": [
+      {
+        "id": 27,
+        "name": "Membro 26"
+      }
+    ]
+  },
+  {
+    "id": 41,
+    "workspace_id": 1,
+    "team_id": 2,
+    "day": 5,
+    "slot": 12,
+    "task": "Tarefa 40",
+    "status": "planejado",
+    "created_by_user_id": null,
+    "created_at": "2026-10-16T05:02:02.942972+00:00",
+    "updated_at": "2026-10-16T05:02:02.942973+00:00",
+    "conflicts": []
+  },
+  {
+    "id": 7,
+    "workspace_id": 1,
+    "team_id": 1,
+    "day": 6,
+    "slot": 6,
+    "task": "Tarefa 6",
+    "status": "planejado",
+    "created_by_user_id": null,
+    "created_at": "2026-10-16T05:02:02.942910+00:00",
+    "updated_at": "2026-10-16T05:02:02.942911+00:00",
+    "conflicts": [
+      {
+        "id": 7,
+        "name": "Membro 06"
+      }
+    ]
+  },
+  {
+    "id": 21,
+    "workspace_id": 1,
+    "team_id": 3,
+    "day": 6,
+    "slot": 6,
+    "task": "Tarefa 20",
+    "status": "planejado",
+    "created_by_user_id": null,
+    "created_at": "2026-10-16T05:02:02.942937+00:00",
+    "updated_at": "2026-10-16T05:02:02.942938+00:00",
+    "conflicts": [
+      {
+        "id": 21,
+        "name": "Membro 20"
+      }
+    ]
+  },
+  {
+    "id": 35,
+    "workspace_id": 1,
+    "team_id": 2,
+    "day": 6,
+    "slot": 6,
+    "task": "Tarefa 34",
+    "status": "planejado",
+    "created_by_user_id": null,
+    "created_at": "2026-10-16T05:02:02.942962+00:00",
+    "updated_at": "2026-10-16T05:02:02.942963+00:00",
+    "conflicts": []
+  },
+  {
+    "id": 49,
+    "workspace_id": 1,
+    "team_id": 1,
+    "day": 6,
+    "slot": 6,
+    "task": "Tarefa 48",
+    "status": "planejado",
+    "created_by_user_id": null,
+    "created_at": "2026-10-16T05:02:02.942988+00:00",
+    "updated_at": "2026-10-16T05:02:02.942988+00:00",
+    "conflicts": [
+      {
+        "id": 7,
+        "name": "Membro 06"
+      }
+    ]
+  },
+  {
+    "id": 14,
+    "workspace_id": 1,
+    "team_id": 2,
+    "day": 6,
+    "slot": 13,
+    "task": "Tarefa 13",
+    "status": "planejado",
+    "created_by_user_id": null,
+    "created_at": "2026-10-16T05:02:02.942923+00:00",
+    "updated_at": "2026-10-16T05:02:02.942924+00:00",
+    "conflicts": [
+      {
+        "id": 14,
+        "name": "Membro 13"
+      }
+    ]
+  },
+  {
+    "id": 28,
+    "workspace_id": 1,
+    "team_id": 1,
+    "day": 6,
+    "slot": 13,
+    "task": "Tarefa 27",
+    "status": "planejado",
+    "created_by_user_id": null,
+    "created_at": "2026-10-16T05:02:02.942949+00:00",
+    "updated_at": "2026-10-16T05:02:02.942950+00:00",
+    "conflicts": [
+      {
+        "id": 28,
+        "name": "Membro 27"
+      }
+    ]
+  },
+  {
+    "id": 42,
+    "workspace_id": 1,
+    "team_id": 3,
+    "day": 6,
+    "slot": 13,
+    "task": "Tarefa 41",
+    "status": "planejado",
+    "created_by_user_id": null,
+    "created_at": "2026-10-16T05:02:02.942974+00:00",
+    "updated_at": "2026-10-16T05:02:02.942975+00:00",
+    "conflicts": []
+  }
+]

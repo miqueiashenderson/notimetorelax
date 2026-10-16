@@ -20,6 +20,7 @@ from database import (
     get_schedule_entries, get_schedule_entry, add_schedule_entry,
     add_schedule_entries_bulk, update_schedule_entry, delete_schedule_entry,
     delete_schedule_entries_bulk, SCHEDULE_STATUSES,
+    carregar_snapshot_workspace,
 )
 from extractor import extrair_de_pdf_bytes, title_case, SLOTS
 
@@ -201,18 +202,21 @@ def _redirect_url(path: str, erro: str = "") -> str:
 _VALID_COLOR = re.compile(r"^#[0-9a-fA-F]{6}$")
 
 
-def _teams_payload(ws) -> list:
+def _teams_payload(ws, snapshot=None) -> list:
     """Equipes do workspace com seus integrantes (e marcação de líder)."""
-    members = {m.id: m for m in get_members(ws.id)}
+    if snapshot is None:
+        members_dict, team_members_list, teams_list, _ = carregar_snapshot_workspace(ws.id)
+    else:
+        members_dict, team_members_list, teams_list, _ = snapshot
     by_team: dict[int, list] = {}
-    for tm in get_workspace_team_members(ws.id):
-        if tm.member_id in members:
+    for tm in team_members_list:
+        if tm.member_id in members_dict:
             by_team.setdefault(tm.team_id, []).append(tm)
     out = []
-    for t in get_teams(ws.id):
+    for t in teams_list:
         tms = []
         for tm in by_team.get(t.id, []):
-            m = members[tm.member_id]
+            m = members_dict[tm.member_id]
             tms.append({
                 "member_id": m.id,
                 "name": m.name,
@@ -227,18 +231,21 @@ def _teams_payload(ws) -> list:
     return out
 
 
-def _schedule_payload(ws) -> list:
+def _schedule_payload(ws, snapshot=None) -> list:
     """Entradas da escala com os conflitos (integrantes ocupados) de cada uma."""
-    members = {m.id: m for m in get_members(ws.id)}
-    busy = {mid: {(b[0], b[1]) for b in m.get_all_busy()} for mid, m in members.items()}
+    if snapshot is None:
+        members_dict, team_members_list, _, schedule_entries_list = carregar_snapshot_workspace(ws.id)
+    else:
+        members_dict, team_members_list, _, schedule_entries_list = snapshot
+    busy = {mid: {(b[0], b[1]) for b in m.get_all_busy()} for mid, m in members_dict.items()}
     team_members: dict[int, list] = {}
-    for tm in get_workspace_team_members(ws.id):
+    for tm in team_members_list:
         team_members.setdefault(tm.team_id, []).append(tm.member_id)
     out = []
-    for e in get_schedule_entries(ws.id):
+    for e in schedule_entries_list:
         conflitos = []
         for mid in team_members.get(e.team_id, []):
-            m = members.get(mid)
+            m = members_dict.get(mid)
             if m and (e.day, e.slot) in busy.get(mid, set()):
                 conflitos.append({"id": m.id, "name": m.name})
         d = e.to_dict()
@@ -567,14 +574,16 @@ async def escala_page(request: Request, slug: str):
         return RedirectResponse(url=f"/workspace/{slug}/login", status_code=302)
     user = _get_current_user(request)
     uid = user.id if user else None
+    snapshot = carregar_snapshot_workspace(ws.id)
+    members_dict = snapshot[0]
     response = templates.TemplateResponse(
         request=request,
         name="escala.html",
         context={
             "workspace": ws.to_dict(),
-            "members": [m.to_dict() for m in get_members(ws.id)],
-            "teams": _teams_payload(ws),
-            "schedule": _schedule_payload(ws),
+            "members": [m.to_dict() for m in members_dict.values()],
+            "teams": _teams_payload(ws, snapshot),
+            "schedule": _schedule_payload(ws, snapshot),
             "status_labels": STATUS_LABELS,
             "user": user.to_dict() if user else None,
             "is_owner": bool(uid and ws.owner_id == uid),

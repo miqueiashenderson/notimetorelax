@@ -1,0 +1,242 @@
+[
+  {
+    "id": 1,
+    "workspace_id": 1,
+    "name": "Equipe 1",
+    "color": "#3ddbd9",
+    "created_at": "2026-10-16T05:02:02.927238+00:00",
+    "updated_at": "2026-10-16T05:02:02.927243+00:00",
+    "members": [
+      {
+        "member_id": 1,
+        "name": "Membro 00",
+        "color": "#3ddbd9",
+        "user_id": null,
+        "is_leader": true
+      },
+      {
+        "member_id": 4,
+        "name": "Membro 03",
+        "color": "#d2a106",
+        "user_id": null,
+        "is_leader": false
+      },
+      {
+        "member_id": 7,
+        "name": "Membro 06",
+        "color": "#ff7eb6",
+        "user_id": null,
+        "is_leader": false
+      },
+      {
+        "member_id": 10,
+        "name": "Membro 09",
+        "color": "#a56eff",
+        "user_id": null,
+        "is_leader": false
+      },
+      {
+        "member_id": 13,
+        "name": "Membro 12",
+        "color": "#7a4bff",
+        "user_id": null,
+        "is_leader": false
+      },
+      {
+        "member_id": 16,
+        "name": "Membro 15",
+        "color": "#ffb74d",
+        "user_id": null,
+        "is_leader": false
+      },
+      {
+        "member_id": 19,
+        "name": "Membro 18",
+        "color": "#64b5f6",
+        "user_id": null,
+        "is_leader": false
+      },
+      {
+        "member_id": 22,
+        "name": "Membro 21",
+        "color": "#ee5396",
+        "user_id": null,
+        "is_leader": false
+      },
+      {
+        "member_id": 25,
+        "name": "Membro 24",
+        "color": "#be95ff",
+        "user_id": null,
+        "is_leader": false
+      },
+      {
+        "member_id": 28,
+        "name": "Membro 27",
+        "color": "#08bdba",
+        "user_id": null,
+        "is_leader": false
+      }
+    ]
+  },
+  {
+    "id": 2,
+    "workspace_id": 1,
+    "name": "Equipe 2",
+    "color": "#ee5396",
+    "created_at": "2026-10-16T05:02:02.927245+00:00",
+    "updated_at": "2026-10-16T05:02:02.927247+00:00",
+    "members": [
+      {
+        "member_id": 11,
+        "name": "Membro 10",
+        "color": "#6fdc8c",
+        "user_id": null,
+        "is_leader": true
+      },
+      {
+        "member_id": 2,
+        "name": "Membro 01",
+        "color": "#ee5396",
+        "user_id": null,
+        "is_leader": false
+      },
+      {
+        "member_id": 5,
+        "name": "Membro 04",
+        "color": "#be95ff",
+        "user_id": null,
+        "is_leader": false
+      },
+      {
+        "member_id": 8,
+        "name": "Membro 07",
+        "color": "#08bdba",
+        "user_id": null,
+        "is_leader": false
+      },
+      {
+        "member_id": 14,
+        "name": "Membro 13",
+        "color": "#ff6b6b",
+        "user_id": null,
+        "is_leader": false
+      },
+      {
+        "member_id": 17,
+        "name": "Membro 16",
+        "color": "#81c784",
+        "user_id": null,
+        "is_leader": false
+      },
+      {
+        "member_id": 20,
+        "name": "Membro 19",
+        "color": "#ba68c8",
+        "user_id": null,
+        "is_leader": false
+      },
+      {
+        "member_id": 23,
+        "name": "Membro 22",
+        "color": "#42be65",
+        "user_id": null,
+        "is_leader": false
+      },
+      {
+        "member_id": 26,
+        "name": "Membro 25",
+        "color": "#4589ff",
+        "user_id": null,
+        "is_leader": false
+      },
+      {
+        "member_id": 29,
+        "name": "Membro 28",
+        "color": "#ff8389",
+        "user_id": null,
+        "is_leader": false
+      }
+    ]
+  },
+  {
+    "id": 3,
+    "workspace_id": 1,
+    "name": "Equipe 3",
+    "color": "#42be65",
+    "created_at": "2026-10-16T05:02:02.927248+00:00",
+    "updated_at": "2026-10-16T05:02:02.927249+00:00",
+    "members": [
+      {
+        "member_id": 21,
+        "name": "Membro 20",
+        "color": "#3ddbd9",
+        "user_id": null,
+        "is_leader": true
+      },
+      {
+        "member_id": 3,
+        "name": "Membro 02",
+        "color": "#42be65",
+        "user_id": null,
+        "is_leader": false
+      },
+      {
+        "member_id": 6,
+        "name": "Membro 05",
+        "color": "#4589ff",
+        "user_id": null,
+        "is_leader": false
+      },
+      {
+        "member_id": 9,
+        "name": "Membro 08",
+        "color": "#ff8389",
+        "user_id": null,
+        "is_leader": false
+      },
+      {
+        "member_id": 12,
+        "name": "Membro 11",
+        "color": "#ff9f43",
+        "user_id": null,
+        "is_leader": false
+      },
+      {
+        "member_id": 15,
+        "name": "Membro 14",
+        "color": "#4dd0e1",
+        "user_id": null,
+        "is_leader": false
+      },
+      {
+        "member_id": 18,
+        "name": "Membro 17",
+        "color": "#f06292",
+        "user_id": null,
+        "is_leader": false
+      },
+      {
+        "member_id": 24,
+        "name": "Membro 23",
+        "color": "#d2a106",
+        "user_id": null,
+        "is_leader": false
+      },
+      {
+        "member_id": 27,
+        "name": "Membro 26",
+        "color": "#ff7eb6",
+        "user_id": null,
+        "is_leader": false
+      },
+      {
+        "member_id": 30,
+        "name": "Membro 29",
+        "color": "#a56eff",
+        "user_id": null,
+        "is_leader": false
+      }
+    ]
+  }
+]

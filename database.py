@@ -772,6 +772,37 @@ def get_leading_team_ids(workspace_id: int, user_id: int):
         return {r[0] for r in rows}
 
 
+def carregar_snapshot_workspace(workspace_id: int):
+    """Carrega membros, vínculos equipe-membro (com equipes) e entradas de escala
+    do workspace em no máximo 3 queries, retornando estruturas simples (dicts).
+
+    Retorna (members_dict, team_members_list, teams_list, schedule_entries_list):
+      - members_dict: {member_id: Member}
+      - team_members_list: lista de TeamMember objects
+      - teams_list: lista de Team objects
+      - schedule_entries_list: lista de ScheduleEntry objects
+    """
+    with Session(get_engine()) as sess:
+        members = list(sess.query(Member).filter_by(workspace_id=workspace_id).all())
+        members_dict = {m.id: m for m in members}
+        team_members_list = list(
+            sess.query(TeamMember)
+            .join(Team, TeamMember.team_id == Team.id)
+            .filter(Team.workspace_id == workspace_id)
+            .all()
+        )
+        teams_list = list(
+            sess.query(Team).filter_by(workspace_id=workspace_id).order_by(Team.id).all()
+        )
+        schedule_entries_list = list(
+            sess.query(ScheduleEntry)
+            .filter_by(workspace_id=workspace_id)
+            .order_by(ScheduleEntry.day, ScheduleEntry.slot, ScheduleEntry.id)
+            .all()
+        )
+    return members_dict, team_members_list, teams_list, schedule_entries_list
+
+
 # ─── Escala de trabalho ─────────────────────────────────────────────────────
 
 
